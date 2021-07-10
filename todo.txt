@@ -1,0 +1,1 @@
+Figure out if __defineGetter__, __lookupSetter__, etc, work correctly
