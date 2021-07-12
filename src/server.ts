@@ -8,7 +8,7 @@ import {
 } from './internalTypes';
 import { ClassOf, INCServer, INCSocket, NCServerOptions } from './types';
 import { getStructure, handleSocket, SocketSend } from './util';
-import { getInstanceID, getInstanceMap } from './wrapper';
+import { getInstanceID, getInstanceMap, isClass } from './wrapper';
 
 class Client<T> {
     private idMap: Record<string, string>;
@@ -83,7 +83,7 @@ class Client<T> {
         msg: MessageCreateInstance
     ): Promise<PartialPacket> {
         const [clazz] = this.server.traverse(msg.path, this.idMap);
-        if (typeof clazz !== 'function') {
+        if (!isClass(clazz)) {
             throw new Error('Path must point to a class');
         }
         const instance = new clazz(...msg.args);
