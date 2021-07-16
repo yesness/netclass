@@ -1,6 +1,7 @@
+import NetClass from '.';
 import { Structure } from './internalTypes';
 import { INCSocket } from './types';
-import { isClass, wrapClass } from './wrapper';
+import { isNetClass } from './wrapper';
 
 export type SocketSend<T> = (json: T) => void;
 
@@ -52,66 +53,122 @@ export function handleSocket<TSend, TReceive>(
     };
 }
 
-const EmptyClass = wrapClass(class EmptyClass {});
-const classStop = Object.getPrototypeOf(EmptyClass);
-const instanceStop = Object.getPrototypeOf(EmptyClass.prototype);
-const defaultClassProps = getAllProps(EmptyClass);
-const defaultInstanceProps = getAllProps(EmptyClass.prototype);
+class EmptyClass {}
+class GetStructureHelper {
+    static classStop = Object.getPrototypeOf(EmptyClass);
+    static instanceStop = Object.getPrototypeOf(EmptyClass.prototype);
+    // Pass in 'object' to include all props
+    static defaultClassProps = GetStructureHelper.getAllProps(
+        EmptyClass,
+        'object'
+    );
+    static defaultInstanceProps = GetStructureHelper.getAllProps(
+        EmptyClass.prototype,
+        'object'
+    );
+    static defaultFunctionProps = GetStructureHelper.getAllProps(function () {},
+    'object');
 
-function getAllProps(toCheck: any): string[] {
-    const props: string[] = [];
-    let obj = toCheck;
-    while (true) {
-        if (!obj || obj === classStop || obj === instanceStop) break;
-        props.push(...Object.getOwnPropertyNames(obj));
-        obj = Object.getPrototypeOf(obj);
-    }
-    return props.sort().filter((e, i, arr) => {
-        if (e != arr[i + 1]) return true;
-    });
-}
+    static getStructure(object: any): Structure | null {
+        if (object == null) return null;
 
-function getStructureHelper(
-    object: any,
-    type: 'class' | 'instance' | 'object'
-): Record<string, Structure> {
-    const structure: Record<string, Structure> = {};
-    let props = getAllProps(object);
-    for (let prop of props) {
-        if (
-            (type === 'class' && defaultClassProps.includes(prop)) ||
-            (type === 'instance' && defaultInstanceProps.includes(prop))
-        )
-            continue;
-        const struct = getStructure(object[prop]);
-        if (struct !== null) {
-            structure[prop] = struct;
-        }
-    }
-    return structure;
-}
-
-export function getStructure(object: any): Structure | null {
-    if (object == null) return null;
-    const objIsClass = isClass(object);
-    if (objIsClass || typeof object === 'object') {
-        if (objIsClass) {
+        // Handle net classes
+        if (isNetClass(object)) {
             return {
                 type: 'class',
-                classStructure: getStructureHelper(object, 'class'),
-                instanceStructure: getStructureHelper(
+                classStructure: GetStructureHelper.getStructureHelper(
+                    object,
+                    'class'
+                ),
+                instanceStructure: GetStructureHelper.getStructureHelper(
                     object.prototype,
                     'instance'
                 ),
             };
-        } else {
+        }
+
+        // Handle objects
+        else if (typeof object === 'object') {
             return {
                 type: 'object',
-                structure: getStructureHelper(object, 'object'),
+                structure: GetStructureHelper.getStructureHelper(
+                    object,
+                    'object'
+                ),
             };
         }
-    } else if (typeof object === 'function') {
-        return { type: 'function' };
+
+        // Handle functions
+        else if (typeof object === 'function') {
+            const structure = GetStructureHelper.getStructureHelper(
+                object,
+                'class'
+            );
+            if (Object.keys(structure).length > 0) {
+                return {
+                    type: 'object',
+                    structure,
+                };
+            }
+            return { type: 'function' };
+        }
+
+        return null;
     }
-    return null;
+
+    static getAllProps(
+        toCheck: any,
+        type: 'class' | 'instance' | 'object'
+    ): string[] {
+        const props: string[] = [];
+        let obj = toCheck;
+        while (true) {
+            if (
+                !obj ||
+                obj === GetStructureHelper.classStop ||
+                obj === GetStructureHelper.instanceStop ||
+                obj === NetClass
+            )
+                break;
+            props.push(...Object.getOwnPropertyNames(obj));
+            obj = Object.getPrototypeOf(obj);
+        }
+        return props.sort().filter((prop, idx, arr) => {
+            if (
+                (type === 'class' &&
+                    GetStructureHelper.isClassOrFunctionProp(prop)) ||
+                (type === 'instance' &&
+                    GetStructureHelper.defaultInstanceProps.includes(prop))
+            ) {
+                return false;
+            }
+            return prop != arr[idx + 1];
+        });
+    }
+
+    static getStructureHelper(
+        object: any,
+        type: 'class' | 'instance' | 'object'
+    ): Record<string, Structure> {
+        const structure: Record<string, Structure> = {};
+        const props = GetStructureHelper.getAllProps(object, type);
+        for (let prop of props) {
+            const struct = getStructure(object[prop]);
+            if (struct !== null) {
+                structure[prop] = struct;
+            }
+        }
+        return structure;
+    }
+
+    static isClassOrFunctionProp(prop: string): boolean {
+        return (
+            GetStructureHelper.defaultClassProps.includes(prop) ||
+            GetStructureHelper.defaultFunctionProps.includes(prop)
+        );
+    }
+}
+
+export function getStructure(object: any): Structure | null {
+    return GetStructureHelper.getStructure(object);
 }

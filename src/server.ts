@@ -8,7 +8,7 @@ import {
 } from './internalTypes';
 import { ClassOf, INCServer, INCSocket, NCServerOptions } from './types';
 import { getStructure, handleSocket, SocketSend } from './util';
-import { getInstanceID, getInstanceMap, isClass } from './wrapper';
+import { getClassData, getInstanceID, isNetClass } from './wrapper';
 
 class Client<T> {
     private idMap: Record<string, string>;
@@ -22,7 +22,9 @@ class Client<T> {
     }
 
     private onMessage(msg: Message) {
-        console.debug('[SERVER] onMessage', JSON.stringify(msg, null, 2));
+        if (this.server.debugLogging) {
+            console.debug('[SERVER] onMessage', JSON.stringify(msg, null, 2));
+        }
         this.messageHandler(msg)
             .then((packet) =>
                 this.send({
@@ -30,7 +32,10 @@ class Client<T> {
                     msgID: msg.msgID,
                 })
             )
-            .catch((error) =>
+            .catch((error) => {
+                if (this.server.debugLogging) {
+                    console.error('messageHandler error:', error);
+                }
                 this.send({
                     type: 'error',
                     msgID: msg.msgID,
@@ -38,8 +43,8 @@ class Client<T> {
                         error?.message ??
                         error?.toString() ??
                         '<no error message found>',
-                })
-            );
+                });
+            });
     }
 
     private async messageHandler(msg: Message): Promise<PartialPacket> {
@@ -83,7 +88,7 @@ class Client<T> {
         msg: MessageCreateInstance
     ): Promise<PartialPacket> {
         const [clazz] = this.server.traverse(msg.path, this.idMap);
-        if (!isClass(clazz)) {
+        if (!isNetClass(clazz)) {
             throw new Error('Path must point to a class');
         }
         const instance = new clazz(...msg.args);
@@ -97,9 +102,11 @@ class Client<T> {
 export default class NCServer<T> implements INCServer {
     private object: T;
     structure: Structure;
+    debugLogging: boolean;
 
     constructor(options: NCServerOptions<T>) {
         this.object = options.object;
+        this.debugLogging = options.debugLogging ?? false;
         const struct = getStructure(this.object);
         if (struct === null) {
             throw new Error('Invalid options.object');
@@ -112,8 +119,7 @@ export default class NCServer<T> implements INCServer {
     }
 
     getInstances<T>(clazz: ClassOf<T>): T[] {
-        const instanceMap = getInstanceMap(clazz);
-        return Object.values(instanceMap);
+        return Object.values(getClassData(clazz).instanceMap);
     }
 
     traverse(
@@ -135,7 +141,7 @@ export default class NCServer<T> implements INCServer {
                 if (iid in idMap) {
                     iid = idMap[iid];
                 }
-                const instanceMap = getInstanceMap(obj);
+                const { instanceMap } = getClassData(obj);
                 if (!(iid in instanceMap)) {
                     throw new Error(`Invalid instance ID: ${iid}`);
                 }

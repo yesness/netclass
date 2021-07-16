@@ -1,6 +1,5 @@
 import NetClass from '.';
 import { INCSocket } from './types';
-import { wrapClass } from './wrapper';
 
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
@@ -52,9 +51,10 @@ type ObjectType = {
     Foo: IFooConstruct;
 };
 
-class Foo implements IFoo {
+class Foo extends NetClass implements IFoo {
     private name: string;
     constructor() {
+        super();
         this.name = 'default name';
     }
     async getName(): Promise<string> {
@@ -73,11 +73,14 @@ async function main() {
     const [s1, s2] = getSockets();
     const server = NetClass.createServer<ObjectType>({
         object: {
-            Foo: wrapClass(Foo),
+            Foo,
         },
+        debugLogging: true,
     });
     server.connect(s1);
-    const client = await NetClass.createClient<ObjectType>(s2);
+    const client = await NetClass.createClient<ObjectType>(s2, {
+        debugLogging: true,
+    });
     const { Foo: ClientFoo } = client.getObject();
     const foo = new ClientFoo();
     console.log('name', await foo.getName());
@@ -87,7 +90,7 @@ async function main() {
 }
 
 async function main2() {
-    const MyFoo = wrapClass(Foo);
+    const MyFoo = Foo;
     const foo = new MyFoo();
     console.log(await foo.getName());
     console.log(MyFoo);

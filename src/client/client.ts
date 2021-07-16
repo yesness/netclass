@@ -1,5 +1,5 @@
 import { CallPath, Structure } from '../internalTypes';
-import { INCClient, INCSocket } from '../types';
+import { INCClient, INCSocket, NCClientOptions } from '../types';
 import BaseClient from './base';
 
 class NCClient<T> implements INCClient<T> {
@@ -64,9 +64,10 @@ class NCClient<T> implements INCClient<T> {
 }
 
 export default async function initClient<T>(
-    socket: INCSocket
+    socket: INCSocket,
+    options: NCClientOptions
 ): Promise<NCClient<T>> {
-    const client = new BaseClient(socket);
+    const client = new BaseClient(socket, options?.debugLogging ?? false);
     const structure = await client.getStructure();
     return new NCClient(client, structure);
 }

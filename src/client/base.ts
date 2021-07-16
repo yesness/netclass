@@ -13,7 +13,7 @@ export default class BaseClient {
     private messageResolves: Record<string, Function>;
     private sendRaw: SocketSend<Message>;
 
-    constructor(socket: INCSocket) {
+    constructor(socket: INCSocket, private debugLogging: boolean) {
         this.messageResolves = {};
         this.sendRaw = handleSocket(socket, {
             onJSON: (packet: Packet) => this.onPacket(packet),
@@ -53,7 +53,9 @@ export default class BaseClient {
                 `Received packet with invalid msgID: ${JSON.stringify(packet)}`
             );
         }
-        console.debug('[CLIENT] onPacket', JSON.stringify(packet, null, 2));
+        if (this.debugLogging) {
+            console.debug('[CLIENT] onPacket', JSON.stringify(packet, null, 2));
+        }
         delete this.messageResolves[packet.msgID];
         resolve(packet);
     }

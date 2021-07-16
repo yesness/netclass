@@ -1,37 +1,21 @@
+import NetClass from '.';
 import { ClassOf } from './types';
 
-const CLASS_KEY = '__netclass_instances';
-const INSTANCE_KEY = '__netclass_id';
+export const CLASS_KEY = '__netclass_data';
+export const INSTANCE_KEY = '__netclass_id';
 
-interface IPrototype {
-    prototype: any;
-}
-
-export function wrapClass<T extends IPrototype>(clazz: T): T {
-    let nextID = 1;
-    class Wrapped {
-        constructor(...args: any[]) {
-            const id = `internal-${nextID++}`;
-            anyWrapped[CLASS_KEY][id] = this;
-            const _this: any = this;
-            _this[INSTANCE_KEY] = id;
-            const construct = clazz.prototype.constructor.bind(this);
-            construct(...args);
-        }
+export function getClassData<T>(clazz: ClassOf<T>): {
+    nextID: number;
+    instanceMap: Record<string, T>;
+} {
+    const anyClass: any = clazz;
+    if (!(CLASS_KEY in anyClass)) {
+        anyClass[CLASS_KEY] = {
+            nextID: 1,
+            instanceMap: {},
+        };
     }
-    Wrapped.prototype = clazz.prototype;
-    const anyWrapped: any = Wrapped;
-    const anyClass: any = clazz;
-    Object.keys(anyClass).forEach((key) => {
-        anyWrapped[key] = anyClass[key];
-    });
-    anyWrapped[CLASS_KEY] = {};
-    return anyWrapped;
-}
-
-export function getInstanceMap<T>(clazz: ClassOf<T>): Record<string, T> {
-    const anyClass: any = clazz;
-    return anyClass[CLASS_KEY] ?? {};
+    return anyClass[CLASS_KEY];
 }
 
 export function getInstanceID(instance: any): string {
@@ -41,7 +25,7 @@ export function getInstanceID(instance: any): string {
     throw new Error('No instance ID found for provided instance');
 }
 
-export function isClass(obj: any): boolean {
+export function isNetClass(obj: any): boolean {
     if (typeof obj !== 'function') return false;
-    return CLASS_KEY in obj;
+    return obj.prototype instanceof NetClass;
 }

@@ -1,5 +1,5 @@
+import NetClass from '..';
 import { getStructure } from '../util';
-import { wrapClass } from '../wrapper';
 
 const FUNC = () => {};
 const TFUNC = { type: 'function' };
@@ -68,33 +68,28 @@ const TEST_CASES: Record<string, any> = {
         }),
     ],
     'class instance method': [
-        wrapClass(
-            class A {
-                hello() {}
-            }
-        ),
+        class A extends NetClass {
+            hello() {}
+        },
         TCLASS({}, { hello: TFUNC }),
     ],
     'class static method': [
-        wrapClass(
-            class A {
-                static goodbye() {}
-            }
-        ),
+        class A extends NetClass {
+            static goodbye() {}
+        },
         TCLASS({ goodbye: TFUNC }, {}),
     ],
     'class with props and methods': [
-        wrapClass(
-            class A {
-                static id: any = { a: FUNC };
-                name: any = { b: FUNC };
-                constructor() {
-                    this.name = { b: () => {} };
-                }
-                static wait() {}
-                no() {}
+        class A extends NetClass {
+            static id: any = { a: FUNC };
+            name: any = { b: FUNC };
+            constructor() {
+                super();
+                this.name = { b: () => {} };
             }
-        ),
+            static wait() {}
+            no() {}
+        },
         TCLASS(
             { id: TOBJ({ a: TFUNC }), wait: TFUNC },
             { /* name: TOBJ({ b: TFUNC }), */ no: TFUNC } // instance props not supported
@@ -102,16 +97,12 @@ const TEST_CASES: Record<string, any> = {
     ],
     'object with classes': [
         {
-            Foo: wrapClass(
-                class Foo {
-                    func1() {}
-                }
-            ),
-            Bar: wrapClass(
-                class Bar {
-                    static func2() {}
-                }
-            ),
+            Foo: class Foo extends NetClass {
+                func1() {}
+            },
+            Bar: class Bar extends NetClass {
+                static func2() {}
+            },
         },
         TOBJ({
             Foo: TCLASS({}, { func1: TFUNC }),
@@ -119,7 +110,7 @@ const TEST_CASES: Record<string, any> = {
         }),
     ],
     'child class': () => {
-        class Parent {
+        class Parent extends NetClass {
             static parentStatic() {}
             parentInstance() {}
         }
@@ -129,8 +120,8 @@ const TEST_CASES: Record<string, any> = {
         }
         return [
             {
-                Parent: wrapClass(Parent),
-                Child: wrapClass(Child),
+                Parent,
+                Child,
             },
             TOBJ({
                 Parent: TCLASS(
@@ -138,11 +129,25 @@ const TEST_CASES: Record<string, any> = {
                     { parentInstance: TFUNC }
                 ),
                 Child: TCLASS(
-                    { childStatic: TFUNC }, // parentStatic should not be included
+                    { parentStatic: TFUNC, childStatic: TFUNC },
                     { parentInstance: TFUNC, childInstance: TFUNC }
                 ),
             }),
         ];
+    },
+    'class not extend NetClass': [
+        class A {
+            static hello() {}
+            goodbye() {}
+        },
+        TOBJ({
+            hello: TFUNC,
+        }),
+    ],
+    'function not extend NetClass': () => {
+        function A() {}
+        A.staticFunc = FUNC;
+        return [A, TOBJ({ staticFunc: TFUNC })];
     },
 };
 

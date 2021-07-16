@@ -2,6 +2,11 @@ export type ClassOf<T> = { new (...args: any[]): T };
 
 export type NCServerOptions<T> = {
     object: T;
+    debugLogging?: boolean;
+};
+
+export type NCClientOptions = {
+    debugLogging?: boolean;
 };
 
 export interface INCSocket {
