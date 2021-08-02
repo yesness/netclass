@@ -108,4 +108,34 @@ describe('NetClass', () => {
         expect(ClientFoo.isMarked()).resolves.toBeTruthy();
         expect(ServerFoo.marked).toBeTruthy();
     });
+
+    test('class with instance functions', async () => {
+        class Person extends NetClass {
+            private name: string;
+            constructor(name: string) {
+                super();
+                this.name = name;
+            }
+            async getName(): Promise<string> {
+                return this.name;
+            }
+            async setName(name: string): Promise<void> {
+                this.name = name;
+            }
+        }
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof Person>({
+            object: Person,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof Person>(s2);
+        const ClientPerson = client.getObject();
+        const p1 = new ClientPerson('alice');
+        const p2 = new ClientPerson('bob');
+        expect(p1.getName()).resolves.toBe('alice');
+        expect(p2.getName()).resolves.toBe('bob');
+        expect(p2.setName('carol')).resolves.toBeUndefined();
+        expect(p2.getName()).resolves.toBe('carol');
+        expect(p1.getName()).resolves.toBe('alice');
+    })
 });
