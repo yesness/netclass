@@ -5,10 +5,11 @@ import BaseClient from './base';
 class NCClient<T> implements INCClient<T> {
     private nextID: number;
     private proxy: T;
+    private pendingObjects: Array<Promise<void>> = [];
 
     constructor(private client: BaseClient, structure: Structure) {
         this.nextID = 1;
-        this.proxy = this.buildProxy(structure, []);
+        this.proxy = this.buildProxy(structure, { path: [] });
     }
 
     private buildProxy(structure: Structure, path: CallPath): any {
@@ -28,19 +29,24 @@ class NCClient<T> implements INCClient<T> {
                 const _this = this;
                 class ProxyClass {
                     constructor(...args: any[]) {
-                        const instanceID = `${_this.nextID++}`;
+                        const instanceID = _this.nextID++;
                         // TODO handle the promise
-                        _this.client.createInstance({
-                            instanceID,
-                            path,
-                            args,
-                        });
+                        _this.pendingObjects.push(
+                            _this.client.createInstance({
+                                instanceID,
+                                path,
+                                args,
+                            })
+                        );
                         return _this.buildProxy(
                             {
                                 type: 'object',
                                 structure: instanceStructure,
                             },
-                            [...path, { instanceID }]
+                            {
+                                objectID: instanceID,
+                                path: [],
+                            }
                         );
                     }
                 }
@@ -49,7 +55,10 @@ class NCClient<T> implements INCClient<T> {
                 break;
         }
         Object.keys(struct).forEach((key) => {
-            proxy[key] = this.buildProxy(struct[key], [...path, key]);
+            proxy[key] = this.buildProxy(struct[key], {
+                objectID: path.objectID,
+                path: [...path.path, key],
+            });
         });
         return proxy;
     }
@@ -58,8 +67,11 @@ class NCClient<T> implements INCClient<T> {
         return this.proxy;
     }
 
-    delete(instance: any): void {
-        throw new Error('Method not implemented.');
+    async resolveAll(): Promise<void> {
+        console.log(this.pendingObjects.length);
+        await Promise.all(
+            this.pendingObjects.splice(0, this.pendingObjects.length)
+        );
     }
 }
 

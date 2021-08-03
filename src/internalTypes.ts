@@ -19,12 +19,10 @@ type ObjectStructure = {
 
 export type Structure = FunctionStructure | ClassStructure | ObjectStructure;
 
-export type CallPath = Array<
-    | string
-    | {
-          instanceID: string;
-      }
->;
+export type CallPath = {
+    path: string[];
+    objectID?: number;
+};
 
 export type MessageGetStructure = {
     type: 'get_structure';
@@ -38,7 +36,7 @@ export type MessageCallFunc = {
 
 export type MessageCreateInstance = {
     type: 'create_instance';
-    instanceID: string;
+    instanceID: number;
     path: CallPath;
     args: any[];
 };

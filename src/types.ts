@@ -1,8 +1,7 @@
-export type ClassOf<T> = { new (...args: any[]): T };
-
 export type NCServerOptions<T> = {
     object: T;
     debugLogging?: boolean;
+    garbageCollectInterval?: number; // in milliseconds, defaults to 10 minutes
 };
 
 export type NCClientOptions = {
@@ -18,10 +17,10 @@ export interface INCSocket {
 
 export interface INCServer {
     connect(socket: INCSocket): void;
-    getInstances<T>(clazz: ClassOf<T>): T[];
+    garbageCollect(): void;
 }
 
 export interface INCClient<T> {
     getObject(): T;
-    delete(instance: any): void;
+    resolveAll(): Promise<void>;
 }

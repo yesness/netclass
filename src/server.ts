@@ -1,4 +1,5 @@
 import {
+    CallPath,
     Message,
     MessageCallFunc,
     MessageCreateInstance,
@@ -6,18 +7,25 @@ import {
     PartialPacket,
     Structure,
 } from './internalTypes';
-import { ClassOf, INCServer, INCSocket, NCServerOptions } from './types';
-import { getStructure, handleSocket, SocketSend } from './util';
-import { getClassData, getInstanceID, isNetClass } from './wrapper';
+import { INCServer, INCSocket, NCServerOptions } from './types';
+import { getStructure, handleSocket, isNetClass, SocketSend } from './util';
+
+const DEFAULT_GARBAGE_COLLECT_INTERVAL = 10 * 60 * 1000;
 
 class Client<T> {
-    private idMap: Record<string, string>;
+    private idMap: Record<number, number>;
     private send: SocketSend<Packet>;
 
-    constructor(private server: NCServer<T>, socket: INCSocket) {
+    constructor(
+        private id: number,
+        private server: NCServer<T>,
+        socket: INCSocket,
+        onClose: () => void
+    ) {
         this.idMap = {};
         this.send = handleSocket(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
+            onClose,
         });
     }
 
@@ -62,7 +70,10 @@ class Client<T> {
     }
 
     private async callFunc(msg: MessageCallFunc): Promise<PartialPacket> {
-        const stack = this.server.traverse(msg.path, this.idMap);
+        if (msg.path.objectID != null && msg.path.objectID in this.idMap) {
+            msg.path.objectID = this.idMap[msg.path.objectID];
+        }
+        const stack = this.server.traverse(msg.path);
         if (stack.length < 2) {
             throw new Error('Must be at least 2 items on stack');
         }
@@ -87,12 +98,12 @@ class Client<T> {
     private async createInstance(
         msg: MessageCreateInstance
     ): Promise<PartialPacket> {
-        const [clazz] = this.server.traverse(msg.path, this.idMap);
+        const [clazz] = this.server.traverse(msg.path);
         if (!isNetClass(clazz)) {
             throw new Error('Path must point to a class');
         }
         const instance = new clazz(...msg.args);
-        this.idMap[msg.instanceID] = getInstanceID(instance);
+        this.idMap[msg.instanceID] = this.server.trackObject(instance, this.id);
         return {
             type: 'success',
         };
@@ -103,6 +114,16 @@ export default class NCServer<T> implements INCServer {
     private object: T;
     structure: Structure;
     debugLogging: boolean;
+    private nextClientID: number = 1;
+    private clients: Record<string, Client<T>> = {};
+    private nextObjectID: number = 1;
+    private trackedObjects: Record<
+        string,
+        {
+            object: any;
+            clientIDs: number[];
+        }
+    > = {};
 
     constructor(options: NCServerOptions<T>) {
         this.object = options.object;
@@ -112,42 +133,65 @@ export default class NCServer<T> implements INCServer {
             throw new Error('Invalid options.object');
         }
         this.structure = struct;
+        setInterval(
+            () => this.garbageCollect(),
+            options.garbageCollectInterval ?? DEFAULT_GARBAGE_COLLECT_INTERVAL
+        );
     }
 
     connect(socket: INCSocket): void {
-        new Client(this, socket);
+        const id = this.nextClientID++;
+        this.clients[id] = new Client(id, this, socket, () => {
+            delete this.clients[id];
+        });
     }
 
-    getInstances<T>(clazz: ClassOf<T>): T[] {
-        return Object.values(getClassData(clazz).instanceMap);
+    trackObject(object: any, clientID: number): number {
+        const id = this.nextObjectID++;
+        this.trackedObjects[id] = {
+            object,
+            clientIDs: [clientID],
+        };
+        return id;
     }
 
-    traverse(
-        path: MessageCallFunc['path'],
-        idMap: Record<string, string>
-    ): any[] {
-        const stack: any[] = [this.object];
+    traverse({ path, objectID }: CallPath): any[] {
+        const stack: any[] = [];
+        if (objectID != null) {
+            if (!(objectID in this.trackedObjects)) {
+                throw new Error(`Invalid objectID: ${objectID}`);
+            }
+            stack.push(this.trackedObjects[objectID].object);
+        } else {
+            stack.push(this.object);
+        }
         for (let part of path) {
             let obj = stack[0];
-            if (typeof part === 'string') {
-                if (!(part in obj)) {
-                    throw new Error(
-                        `Failed to resolve "${part}" in ${JSON.stringify(path)}`
-                    );
-                }
-                stack.unshift(obj[part]);
-            } else {
-                let iid = part.instanceID;
-                if (iid in idMap) {
-                    iid = idMap[iid];
-                }
-                const { instanceMap } = getClassData(obj);
-                if (!(iid in instanceMap)) {
-                    throw new Error(`Invalid instance ID: ${iid}`);
-                }
-                stack.unshift(instanceMap[iid]);
+            if (!(part in obj)) {
+                throw new Error(
+                    `Failed to resolve "${part}" in ${JSON.stringify(path)}`
+                );
             }
+            stack.unshift(obj[part]);
         }
         return stack;
+    }
+
+    garbageCollect() {
+        const objectIDs = Object.keys(this.trackedObjects);
+        const allClientIDs = Object.keys(this.clients).map((id) =>
+            parseInt(id)
+        );
+        for (let id of objectIDs) {
+            const { clientIDs } = this.trackedObjects[id];
+            for (let i = clientIDs.length - 1; i >= 0; i--) {
+                if (!allClientIDs.includes(clientIDs[i])) {
+                    clientIDs.splice(i, 1);
+                }
+            }
+            if (clientIDs.length === 0) {
+                delete this.trackedObjects[id];
+            }
+        }
     }
 }

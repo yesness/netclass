@@ -1,5 +1,5 @@
 import NetClass from '..';
-import { INCSocket } from '../types';
+import { INCServer, INCSocket } from '../types';
 
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
@@ -35,6 +35,11 @@ function getSockets(): [INCSocket, INCSocket] {
         },
     };
     return [s1, s2];
+}
+
+function getNumTrackedObjects(server: INCServer): number {
+    const s: any = server;
+    return Object.keys(s.trackedObjects).length;
 }
 
 describe('NetClass', () => {
@@ -137,5 +142,23 @@ describe('NetClass', () => {
         expect(p2.setName('carol')).resolves.toBeUndefined();
         expect(p2.getName()).resolves.toBe('carol');
         expect(p1.getName()).resolves.toBe('alice');
-    })
+    });
+
+    test('garbage collection', async () => {
+        class A extends NetClass {}
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof A>({
+            object: A,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof A>(s2);
+        const ClientA = client.getObject();
+        expect(getNumTrackedObjects(server)).toBe(0);
+        new ClientA();
+        expect(getNumTrackedObjects(server)).toBe(1);
+        s1.close();
+        expect(getNumTrackedObjects(server)).toBe(1);
+        server.garbageCollect();
+        expect(getNumTrackedObjects(server)).toBe(0);
+    });
 });

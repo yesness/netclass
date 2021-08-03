@@ -1,7 +1,6 @@
 import NetClass from '.';
 import { Structure } from './internalTypes';
 import { INCSocket } from './types';
-import { isNetClass } from './wrapper';
 
 export type SocketSend<T> = (json: T) => void;
 
@@ -18,6 +17,7 @@ export function handleSocket<TSend, TReceive>(
     socket: INCSocket,
     callbacks: {
         onJSON: (json: TReceive) => void;
+        onClose?: () => void;
     }
 ): SocketSend<TSend> {
     let closed = false;
@@ -47,6 +47,7 @@ export function handleSocket<TSend, TReceive>(
     });
     socket.onClose(() => {
         closed = true;
+        callbacks.onClose?.();
     });
     return (json) => {
         socket.send(Buffer.from(`${JSON.stringify(json)}\n`, 'utf-8'));
@@ -171,4 +172,9 @@ class GetStructureHelper {
 
 export function getStructure(object: any): Structure | null {
     return GetStructureHelper.getStructure(object);
+}
+
+export function isNetClass(obj: any): boolean {
+    if (typeof obj !== 'function') return false;
+    return obj.prototype instanceof NetClass;
 }
