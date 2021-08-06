@@ -6,12 +6,11 @@ import {
     Packet,
     PacketResult,
     PartialPacket,
-    Structure,
 } from './internalTypes';
+import Structurer, { Structure } from './structurer';
+import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
-import { getStructure, handleSocket, isNetClass, SocketSend } from './util';
-
-const DEFAULT_GARBAGE_COLLECT_INTERVAL = 10 * 60 * 1000;
+import { handleSocket, isNetClass, SocketSend } from './util';
 
 class Client<T> {
     private idMap: Record<number, number>;
@@ -92,13 +91,16 @@ class Client<T> {
         }
         let object: PacketResult['object'] = undefined;
         if (typeof result === 'object') {
-            let structure = getStructure(result);
+            let structure = Structurer.getStructure(result);
             if (structure === null || structure.type !== 'object') {
                 throw new Error('not possible');
             }
             if (Object.keys(structure.structure).length > 0) {
                 object = {
-                    id: this.server.trackObject(result, this.id),
+                    id: this.server.tracker.trackObjectFromClient(
+                        result,
+                        this.id
+                    ),
                     structure,
                 };
             }
@@ -119,7 +121,10 @@ class Client<T> {
             throw new Error('Path must point to a class');
         }
         const instance = new clazz(...msg.args);
-        this.idMap[msg.instanceID] = this.server.trackObject(instance, this.id);
+        this.idMap[msg.instanceID] = this.server.tracker.trackObjectFromClient(
+            instance,
+            this.id
+        );
         return {
             type: 'success',
         };
@@ -128,31 +133,21 @@ class Client<T> {
 
 export default class NCServer<T> implements INCServer {
     private object: T;
-    structure: Structure;
     debugLogging: boolean;
+    tracker: Tracker;
+    structure: Structure;
     private nextClientID: number = 1;
     private clients: Record<string, Client<T>> = {};
-    private nextObjectID: number = 1;
-    private trackedObjects: Record<
-        string,
-        {
-            object: any;
-            clientIDs: number[];
-        }
-    > = {};
 
     constructor(options: NCServerOptions<T>) {
         this.object = options.object;
         this.debugLogging = options.debugLogging ?? false;
-        const struct = getStructure(this.object);
+        this.tracker = new Tracker();
+        const struct = Structurer.getStructure(this.object);
         if (struct === null) {
             throw new Error('Invalid options.object');
         }
         this.structure = struct;
-        setInterval(
-            () => this.garbageCollect(),
-            options.garbageCollectInterval ?? DEFAULT_GARBAGE_COLLECT_INTERVAL
-        );
     }
 
     connect(socket: INCSocket): void {
@@ -162,52 +157,26 @@ export default class NCServer<T> implements INCServer {
         });
     }
 
-    trackObject(object: any, clientID: number): number {
-        const id = this.nextObjectID++;
-        this.trackedObjects[id] = {
-            object,
-            clientIDs: [clientID],
-        };
-        return id;
-    }
-
     traverse({ path, objectID }: CallPath): any[] {
-        const stack: any[] = [];
-        if (objectID != null) {
-            if (!(objectID in this.trackedObjects)) {
-                throw new Error(`Invalid objectID: ${objectID}`);
-            }
-            stack.push(this.trackedObjects[objectID].object);
-        } else {
-            stack.push(this.object);
-        }
-        for (let part of path) {
-            let obj = stack[0];
-            if (!(part in obj)) {
-                throw new Error(
-                    `Failed to resolve "${part}" in ${JSON.stringify(path)}`
-                );
-            }
-            stack.unshift(obj[part]);
-        }
-        return stack;
-    }
-
-    garbageCollect() {
-        const objectIDs = Object.keys(this.trackedObjects);
-        const allClientIDs = Object.keys(this.clients).map((id) =>
-            parseInt(id)
-        );
-        for (let id of objectIDs) {
-            const { clientIDs } = this.trackedObjects[id];
-            for (let i = clientIDs.length - 1; i >= 0; i--) {
-                if (!allClientIDs.includes(clientIDs[i])) {
-                    clientIDs.splice(i, 1);
-                }
-            }
-            if (clientIDs.length === 0) {
-                delete this.trackedObjects[id];
-            }
-        }
+        // const stack: any[] = [];
+        // if (objectID != null) {
+        //     if (!(objectID in this.trackedObjects)) {
+        //         throw new Error(`Invalid objectID: ${objectID}`);
+        //     }
+        //     stack.push(this.trackedObjects[objectID].object);
+        // } else {
+        //     stack.push(this.object);
+        // }
+        // for (let part of path) {
+        //     let obj = stack[0];
+        //     if (!(part in obj)) {
+        //         throw new Error(
+        //             `Failed to resolve "${part}" in ${JSON.stringify(path)}`
+        //         );
+        //     }
+        //     stack.unshift(obj[part]);
+        // }
+        // return stack;
+        return [];
     }
 }

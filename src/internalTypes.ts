@@ -1,23 +1,8 @@
+import { Structure } from './structurer';
+
 type MsgID = {
     msgID: string;
 };
-
-type FunctionStructure = {
-    type: 'function';
-};
-
-type ClassStructure = {
-    type: 'class';
-    classStructure: Record<string, Structure>;
-    instanceStructure: Record<string, Structure>;
-};
-
-type ObjectStructure = {
-    type: 'object';
-    structure: Record<string, Structure>;
-};
-
-export type Structure = FunctionStructure | ClassStructure | ObjectStructure;
 
 export type CallPath = {
     path: string[];

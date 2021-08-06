@@ -1,4 +1,5 @@
-import { CallPath, Structure } from '../internalTypes';
+import { CallPath } from '../internalTypes';
+import { Structure } from '../structurer';
 import { INCClient, INCSocket, NCClientOptions } from '../types';
 import BaseClient from './base';
 
@@ -24,7 +25,7 @@ class NCClient<T> implements INCClient<T> {
                 struct = structure.structure;
                 proxy = {};
                 break;
-            case 'class':
+            case 'function':
                 const { instanceStructure } = structure;
                 const _this = this;
                 class ProxyClass {
@@ -50,8 +51,12 @@ class NCClient<T> implements INCClient<T> {
                         );
                     }
                 }
-                struct = structure.classStructure;
+                struct = structure.structure;
                 proxy = ProxyClass;
+                break;
+            case 'simple':
+                struct = {};
+                // TODO
                 break;
         }
         Object.keys(struct).forEach((key) => {

@@ -4,8 +4,8 @@ import {
     MessageCreateInstance,
     Packet,
     PartialMessage,
-    Structure,
 } from '../internalTypes';
+import { Structure } from '../structurer';
 import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
 

@@ -17,7 +17,6 @@ export interface INCSocket {
 
 export interface INCServer {
     connect(socket: INCSocket): void;
-    garbageCollect(): void;
 }
 
 export interface INCClient<T> {
