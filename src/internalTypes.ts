@@ -51,6 +51,10 @@ export type Message = PartialMessage & MsgID;
 export type PacketResult = {
     type: 'result';
     result: any;
+    object?: {
+        id: number;
+        structure: Structure;
+    };
 };
 
 export type PacketStructure = {

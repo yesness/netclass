@@ -161,4 +161,43 @@ describe('NetClass', () => {
         server.garbageCollect();
         expect(getNumTrackedObjects(server)).toBe(0);
     });
+
+    test('instance as return type', async () => {
+        class Person extends NetClass {
+            private name: string;
+            constructor(name: string) {
+                super();
+                this.name = name;
+            }
+            async getName(): Promise<string> {
+                return this.name;
+            }
+            async setName(name: string): Promise<void> {
+                this.name = name;
+            }
+        }
+        class People extends NetClass {
+            private person: Person | null = null;
+            async set(name: string) {
+                this.person = new Person(name);
+            }
+            async get(): Promise<Person | null> {
+                return this.person;
+            }
+        }
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof People>({
+            object: People,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof People>(s2);
+        const ClientPeople = client.getObject();
+        const ppl = new ClientPeople();
+        expect(ppl.get()).resolves.toBeNull();
+        expect(ppl.set('bob')).resolves.toBeUndefined();
+        const bob = await ppl.get();
+        expect(bob).not.toBeNull();
+        if (bob === null) throw new Error('not possible');
+        expect(bob.getName()).resolves.toBe('bob');
+    });
 });

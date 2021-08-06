@@ -4,6 +4,7 @@ import {
     MessageCallFunc,
     MessageCreateInstance,
     Packet,
+    PacketResult,
     PartialPacket,
     Structure,
 } from './internalTypes';
@@ -89,9 +90,24 @@ class Client<T> {
         } else {
             result = maybeResult;
         }
+        let object: PacketResult['object'] = undefined;
+        if (typeof result === 'object') {
+            let structure = getStructure(result);
+            if (structure === null || structure.type !== 'object') {
+                throw new Error('not possible');
+            }
+            if (Object.keys(structure.structure).length > 0) {
+                object = {
+                    id: this.server.trackObject(result, this.id),
+                    structure,
+                };
+            }
+        }
+
         return {
             type: 'result',
             result,
+            object,
         };
     }
 
