@@ -1,4 +1,3 @@
-import NetClass from '.';
 import { INCSocket } from './types';
 
 export type SocketSend<T> = (json: T) => void;
@@ -53,7 +52,6 @@ export function handleSocket<TSend, TReceive>(
     };
 }
 
-export function isNetClass(obj: any): boolean {
-    if (typeof obj !== 'function') return false;
-    return obj.prototype instanceof NetClass;
+export function isInstance(object: any): boolean {
+    return object && object.constructor !== Object;
 }

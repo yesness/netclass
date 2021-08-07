@@ -1,10 +1,4 @@
-import {
-    CallPath,
-    Message,
-    MessageCreateInstance,
-    Packet,
-    PartialMessage,
-} from '../internalTypes';
+import { Message, Packet, PartialMessage } from '../internalTypes';
 import { Structure } from '../structurer';
 import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
@@ -29,7 +23,7 @@ export default class BaseClient {
         }
     }
 
-    private async send(msg: PartialMessage): Promise<Packet> {
+    async send(msg: PartialMessage): Promise<Packet> {
         const packet: Packet = await new Promise((resolve) => {
             const msgID = this.getMessageID();
             this.messageResolves[msgID] = resolve;
@@ -62,33 +56,9 @@ export default class BaseClient {
 
     async getStructure(): Promise<Structure> {
         const packet = await this.send({ type: 'get_structure' });
-        if (packet.type !== 'structure') {
+        if (packet.type !== 'get_structure_result') {
             throw new Error('Invalid response packet');
         }
         return packet.structure;
-    }
-
-    async callFunc(path: CallPath, args: any[]): Promise<any> {
-        const packet = await this.send({
-            type: 'call_func',
-            path,
-            args,
-        });
-        if (packet.type !== 'result') {
-            throw new Error('Invalid response packet');
-        }
-        return packet.result;
-    }
-
-    async createInstance(
-        args: Pick<MessageCreateInstance, 'instanceID' | 'path' | 'args'>
-    ): Promise<void> {
-        const packet = await this.send({
-            type: 'create_instance',
-            ...args,
-        });
-        if (packet.type !== 'success') {
-            throw new Error('Invalid response packet');
-        }
     }
 }

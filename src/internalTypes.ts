@@ -6,7 +6,7 @@ type MsgID = {
 
 export type CallPath = {
     path: string[];
-    objectID?: number;
+    objectID: number;
 };
 
 export type MessageGetStructure = {
@@ -33,17 +33,8 @@ export type PartialMessage =
 
 export type Message = PartialMessage & MsgID;
 
-export type PacketResult = {
-    type: 'result';
-    result: any;
-    object?: {
-        id: number;
-        structure: Structure;
-    };
-};
-
 export type PacketStructure = {
-    type: 'structure';
+    type: 'get_structure_result' | 'call_func_result';
     structure: Structure;
 };
 
@@ -56,10 +47,6 @@ export type PacketError = {
     error: string;
 };
 
-export type PartialPacket =
-    | PacketResult
-    | PacketStructure
-    | PacketSuccess
-    | PacketError;
+export type PartialPacket = PacketStructure | PacketSuccess | PacketError;
 
 export type Packet = PartialPacket & MsgID;

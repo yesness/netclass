@@ -39,7 +39,8 @@ function getSockets(): [INCSocket, INCSocket] {
 
 function getNumTrackedObjects(server: INCServer): number {
     const s: any = server;
-    return Object.keys(s.trackedObjects).length;
+    const { objects } = s.tracker;
+    return Object.keys(objects).length;
 }
 
 describe('NetClass', () => {
@@ -78,7 +79,7 @@ describe('NetClass', () => {
             mark(): Promise<void>;
             isMarked(): Promise<boolean>;
         }
-        class ServerFoo extends NetClass {
+        class ServerFoo {
             static values: Record<string, string> = {};
             static marked: boolean = false;
             static async set(key: string, val: string): Promise<void> {
@@ -115,10 +116,9 @@ describe('NetClass', () => {
     });
 
     test('class with instance functions', async () => {
-        class Person extends NetClass {
+        class Person {
             private name: string;
             constructor(name: string) {
-                super();
                 this.name = name;
             }
             async getName(): Promise<string> {
@@ -145,7 +145,7 @@ describe('NetClass', () => {
     });
 
     test('garbage collection', async () => {
-        class A extends NetClass {}
+        class A {}
         const [s1, s2] = getSockets();
         const server = NetClass.createServer<typeof A>({
             object: A,
@@ -153,20 +153,17 @@ describe('NetClass', () => {
         server.connect(s1);
         const client = await NetClass.createClient<typeof A>(s2);
         const ClientA = client.getObject();
-        expect(getNumTrackedObjects(server)).toBe(0);
-        new ClientA();
         expect(getNumTrackedObjects(server)).toBe(1);
+        new ClientA();
+        expect(getNumTrackedObjects(server)).toBe(2);
         s1.close();
         expect(getNumTrackedObjects(server)).toBe(1);
-        server.garbageCollect();
-        expect(getNumTrackedObjects(server)).toBe(0);
     });
 
     test('instance as return type', async () => {
-        class Person extends NetClass {
+        class Person {
             private name: string;
             constructor(name: string) {
-                super();
                 this.name = name;
             }
             async getName(): Promise<string> {
@@ -176,7 +173,7 @@ describe('NetClass', () => {
                 this.name = name;
             }
         }
-        class People extends NetClass {
+        class People {
             private person: Person | null = null;
             async set(name: string) {
                 this.person = new Person(name);
@@ -189,15 +186,54 @@ describe('NetClass', () => {
         const server = NetClass.createServer<typeof People>({
             object: People,
         });
+        const assertNumTracked = (num: number) =>
+            expect(getNumTrackedObjects(server)).toBe(num);
         server.connect(s1);
         const client = await NetClass.createClient<typeof People>(s2);
         const ClientPeople = client.getObject();
+        assertNumTracked(1);
         const ppl = new ClientPeople();
+        assertNumTracked(2);
         expect(ppl.get()).resolves.toBeNull();
         expect(ppl.set('bob')).resolves.toBeUndefined();
+        assertNumTracked(2);
         const bob = await ppl.get();
+        assertNumTracked(3);
         expect(bob).not.toBeNull();
         if (bob === null) throw new Error('not possible');
         expect(bob.getName()).resolves.toBe('bob');
+        expect(bob.setName('alice')).resolves.toBeUndefined();
+        expect(bob.getName()).resolves.toBe('alice');
+        assertNumTracked(3);
+        const alice = await ppl.get();
+        assertNumTracked(3);
+        expect(alice).not.toBeNull();
+        if (alice === null) throw new Error('not possible');
+        expect(alice.getName()).resolves.toBe('alice');
+    });
+
+    test('client same object equality', async () => {
+        class A {
+            constructor(public name: string) {}
+        }
+        class B {
+            static a: A = new A('hello');
+            static async get(): Promise<A> {
+                return this.a;
+            }
+        }
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof B>({
+            object: B,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof B>(s2);
+        const ClientB = client.getObject();
+        const x = await ClientB.get();
+        expect(x.name).toBe('hello');
+        const y = await ClientB.get();
+        expect(y.name).toBe('hello');
+        // TODO this would ideally be true
+        expect(x === y).toBeFalsy();
     });
 });

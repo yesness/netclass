@@ -80,14 +80,20 @@ describe('Structurer', () => {
             type: 'simple',
             value,
         });
-        const o = (structure: any) => ({
+        const o = (structure: Object, objectID?: number) => ({
             type: 'object',
             structure,
+            objectID,
         });
-        const f = (structure: any = {}, instanceStructure: any = {}) => ({
+        const f = (
+            structure: Object = {},
+            instanceStructure: Object = {},
+            objectID?: number
+        ) => ({
             type: 'function',
             structure,
             instanceStructure,
+            objectID,
         });
 
         class A {
@@ -99,17 +105,27 @@ describe('Structurer', () => {
             static getNextID() {}
             getName() {}
         }
-        const aStructure = f(
-            {
-                nextID: s(1),
-                getNextID: f(),
-            },
-            {
-                getName: f(),
-            }
-        );
+        const aStructure = (objectID: number) =>
+            f(
+                {
+                    nextID: s(1),
+                    getNextID: f(),
+                },
+                {
+                    getName: f(),
+                },
+                objectID
+            );
 
-        const cases: Record<string, [any, any]> = {
+        type Expected =
+            | [any, any]
+            | [
+                  any, // input
+                  any, // expected structure
+                  any[] // tracked objects
+              ];
+
+        const cases: Record<string, Expected | (() => Expected)> = {
             'simple string': ['hello', s('hello')],
             'simple number': [1234, s(1234)],
             'simple boolean': [true, s(true)],
@@ -122,55 +138,92 @@ describe('Structurer', () => {
                     b: s('yay'),
                 }),
             ],
-            function: [() => function () {}, f()],
-            function2: [
-                () => {
-                    function A(this: any) {
-                        this.name = 'a';
-                    }
-                    A.prototype.getName = function () {};
-                    A.nextID = 1;
-                    A.getNextID = function () {};
-                    return A;
-                },
-                f(
+            function: () => {
+                function func() {}
+                return [func, f({}, {}, 1), [func]];
+            },
+            function2: () => {
+                function A(this: any) {
+                    this.name = 'a';
+                }
+                A.prototype.getName = function () {};
+                A.nextID = 1;
+                A.getNextID = function () {};
+                return [
+                    A,
+                    f(
+                        {
+                            nextID: s(1),
+                            getNextID: f(),
+                        },
+                        { getName: f() }, // 'name' should NOT be included since it isn't part of the prototype
+                        1
+                    ),
+                    [A],
+                ];
+            },
+            class: [A, aStructure(1), [A]],
+            instance: () => {
+                const a = new A('bob');
+                return [
+                    a,
+                    o(
+                        {
+                            name: s('bob'),
+                            getName: f(),
+                        },
+                        1
+                    ),
+                    [a],
+                ];
+            },
+            'object with class and instance': () => {
+                const instance = new A('rob');
+                return [
                     {
-                        nextID: s(1),
-                        getNextID: f(),
+                        class: A,
+                        instance,
                     },
-                    { getName: f() } // 'name' should NOT be included since it isn't part of the prototype
-                ),
-            ],
-            class: [() => A, aStructure],
-            instance: [
-                new A('bob'),
-                o({
-                    name: s('bob'),
-                    getName: f(),
-                }),
-            ],
-            'object with class and instance': [
-                {
-                    class: A,
-                    instance: new A('rob'),
-                },
-                o({
-                    class: aStructure,
-                    instance: o({
-                        name: s('rob'),
-                        getName: f(),
+                    o({
+                        class: aStructure(1),
+                        instance: o(
+                            {
+                                name: s('rob'),
+                                getName: f(),
+                            },
+                            2
+                        ),
                     }),
-                }),
-            ],
+                    [A, instance],
+                ];
+            },
         };
 
         Object.keys(cases).forEach((name) => {
-            let [input, expected] = cases[name];
-            if (typeof input === 'function') {
-                input = input();
+            let testCase = cases[name];
+            if (typeof testCase === 'function') {
+                testCase = testCase();
             }
+            let [input, expected] = testCase;
+            const trackedObjects = testCase[2] ?? [];
             test(name, () => {
-                expect(Structurer.getStructure(input)).toEqual(expected);
+                let nextID = 1;
+                const tracker: any = {
+                    trackObject: (object: any) => {
+                        expect(object).toBe(trackedObjects[nextID - 1]);
+                        return nextID++;
+                    },
+                };
+                const { structure, objectIDs } = Structurer.getStructure(
+                    input,
+                    tracker
+                );
+                expect(structure).toEqual(expected);
+                expect(nextID).toBe(trackedObjects.length + 1);
+                const expectedObjectIDs = new Array(trackedObjects.length)
+                    .fill(null)
+                    .map((_, idx) => idx + 1);
+                expect(objectIDs).toEqual(expectedObjectIDs);
             });
         });
     });

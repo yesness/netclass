@@ -3,47 +3,95 @@ type TrackedObject = {
     refIDs: string[];
 };
 
+type Reference =
+    | {
+          clientID: number;
+      }
+    | {
+          type: 'persist';
+      };
+
 export default class Tracker {
     private objects: Record<number, TrackedObject> = {};
     private refs: Record<string, number[]> = {};
     private nextID: number = 1;
 
-    trackObjectFromClient(object: any, clientID: number): number {
-        return this.trackObject(object, `client-${clientID}`);
-    }
-
-    onClientDisconnect(clientID: number) {
-        this.removeReference(`client-${clientID}`);
-    }
-
-    private trackObject(object: any, refID: string): number {
+    trackObject(object: any): number {
+        for (let strID of Object.keys(this.objects)) {
+            const objID = parseInt(strID);
+            if (this.objects[objID].object === object) {
+                return objID;
+            }
+        }
         const objID = this.nextID++;
         this.objects[objID] = {
             object,
-            refIDs: [refID],
+            refIDs: [],
         };
-        this.addReference(refID, objID);
         return objID;
     }
 
-    private removeReference(refID: string) {
-        const objIDs = this.getReferencedObjectIDs(refID);
+    referenceObjects(ref: Reference, objIDs: number[]) {
         for (let objID of objIDs) {
-            const obj = this.objects[objID];
-            obj.refIDs.splice(obj.refIDs.indexOf(refID), 1);
-            if (obj.refIDs.length === 0) {
-                delete this.objects[objID];
-            }
+            this.referenceObject(ref, objID);
         }
     }
 
-    private addReference(refID: string, objID: number) {
+    referenceObject(ref: Reference, objID: number) {
+        const refID = this.getRefID(ref);
+        // Add to this.objects
+        const trackedObject = this.objects[objID];
+        if (!trackedObject.refIDs.includes(refID)) {
+            trackedObject.refIDs.push(refID);
+        }
+        // Add to this.refs
         const objIDs = this.getReferencedObjectIDs(refID);
-        objIDs.push(objID);
+        if (!objIDs.includes(objID)) {
+            objIDs.push(objID);
+        }
         this.refs[refID] = objIDs;
+    }
+
+    dereferenceAllObjects(ref: Reference) {
+        const refID = this.getRefID(ref);
+        const objIDs = this.getReferencedObjectIDs(refID);
+        for (let objID of objIDs) {
+            this.dereferenceObjectInternal(refID, objID);
+        }
+    }
+
+    dereferenceObject(ref: Reference, objID: number) {
+        this.dereferenceObjectInternal(this.getRefID(ref), objID);
+    }
+
+    getObject(objID: number): any {
+        if (!(objID in this.objects)) {
+            throw new Error(`Invalid objID: ${objID}`);
+        }
+        return this.objects[objID].object;
+    }
+
+    private dereferenceObjectInternal(refID: string, objID: number) {
+        const obj = this.objects[objID];
+        obj.refIDs.splice(obj.refIDs.indexOf(refID), 1);
+        if (obj.refIDs.length === 0) {
+            delete this.objects[objID];
+        }
     }
 
     private getReferencedObjectIDs(refID: string): number[] {
         return this.refs[refID] ?? [];
+    }
+
+    private getRefID(ref: Reference): string {
+        if ('clientID' in ref) {
+            return `client-${ref.clientID}`;
+        } else if ('type' in ref) {
+            switch (ref.type) {
+                case 'persist':
+                    return 'persist';
+            }
+        }
+        throw new Error(`Invalid reference: ${JSON.stringify(ref)}`);
     }
 }
