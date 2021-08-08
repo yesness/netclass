@@ -1,5 +1,8 @@
+import Structurer, { ComplexStructure } from './structurer';
+
 type TrackedObject = {
     object: any;
+    structure: ComplexStructure;
     refIDs: string[];
 };
 
@@ -16,19 +19,36 @@ export default class Tracker {
     private refs: Record<string, number[]> = {};
     private nextID: number = 1;
 
-    trackObject(object: any): number {
+    trackObject(object: any, objectIDs: number[]): number {
         for (let strID of Object.keys(this.objects)) {
             const objID = parseInt(strID);
             if (this.objects[objID].object === object) {
+                this.addAllObjectDependencies(objID, objectIDs);
                 return objID;
             }
         }
         const objID = this.nextID++;
         this.objects[objID] = {
             object,
+            structure: Structurer.getComplexStructure({
+                object,
+                tracker: this,
+                objectIDs,
+            }),
             refIDs: [],
         };
+        objectIDs.push(objID);
         return objID;
+    }
+
+    private addAllObjectDependencies(objID: number, objectIDs: number[]) {
+        objectIDs.push(objID);
+        const { structure } = this.objects[objID];
+        for (let value of Object.values(structure.map)) {
+            if (value.type !== 'simple') {
+                this.addAllObjectDependencies(value.objectID, objectIDs);
+            }
+        }
     }
 
     referenceObjects(ref: Reference, objIDs: number[]) {
@@ -64,11 +84,11 @@ export default class Tracker {
         this.dereferenceObjectInternal(this.getRefID(ref), objID);
     }
 
-    getObject(objID: number): any {
+    getTrackedObject(objID: number): TrackedObject {
         if (!(objID in this.objects)) {
             throw new Error(`Invalid objID: ${objID}`);
         }
-        return this.objects[objID].object;
+        return this.objects[objID];
     }
 
     private dereferenceObjectInternal(refID: string, objID: number) {

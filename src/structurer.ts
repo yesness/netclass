@@ -1,36 +1,42 @@
 import Tracker from './tracker';
 import { isInstance } from './util';
 
-export type FunctionStructure = {
-    type: 'function';
-    structure: Record<string, Structure>;
-    instanceStructure: Record<string, Structure>;
-    objectID?: number;
-};
-
-export type ObjectStructure = {
-    type: 'object';
-    structure: Record<string, Structure>;
-    objectID?: number;
-};
-
-export type SimpleStructure = {
+type Simple = {
     type: 'simple';
     value: string | number | boolean | null | undefined;
 };
 
-export type Structure = FunctionStructure | ObjectStructure | SimpleStructure;
+type ObjectReference = {
+    type: 'reference';
+    objectID: number;
+};
 
-type GetStructureReturn = {
-    structure: Structure;
+export type StructureValue = Simple | ObjectReference;
+export type ObjectMap = Record<string, StructureValue>;
+
+export type FunctionStructure = {
+    type: 'function';
+    map: ObjectMap;
+    instanceFuncs: string[];
+};
+
+export type ObjectStructure = {
+    type: 'object';
+    map: ObjectMap;
+    funcs: string[];
+};
+
+export type ComplexStructure = FunctionStructure | ObjectStructure;
+
+export type GetValueReturn = {
+    value: StructureValue;
     objectIDs: number[];
 };
 
-type GetStructureState = {
+type State = {
     object: any;
     tracker: Tracker;
     objectIDs: number[];
-    alreadyTracked: boolean;
 };
 
 class StructurerClass {
@@ -50,19 +56,18 @@ class StructurerClass {
         this.defaultInstanceProps = this.getAllProps(new B(), 'instance');
     }
 
-    getStructure(object: any, tracker: Tracker): GetStructureReturn {
+    getValue(object: any, tracker: Tracker): GetValueReturn {
         const objectIDs: number[] = [];
-        const structure = this.getStructureInternal({
+        const value = this.getValueInternal({
             object,
             tracker,
             objectIDs,
-            alreadyTracked: false,
         });
-        return { structure, objectIDs };
+        return { value, objectIDs };
     }
 
-    private getStructureInternal(state: GetStructureState): Structure {
-        const { object, tracker, objectIDs, alreadyTracked } = state;
+    private getValueInternal(state: State): StructureValue {
+        const { object, tracker, objectIDs } = state;
 
         // Handle simple values
         if (
@@ -77,74 +82,71 @@ class StructurerClass {
             };
         }
 
-        // Handle objects and instances
-        else if (typeof object === 'object') {
-            const objectIsInstance = isInstance(object);
-            let objectID = undefined;
-            if (objectIsInstance && !alreadyTracked) {
-                objectID = tracker.trackObject(object);
-                objectIDs.push(objectID);
-            }
+        // Handle objects and functions
+        else if (['object', 'function'].includes(typeof object)) {
             return {
-                type: 'object',
-                structure: this.getStructureHelper(
-                    {
-                        ...state,
-                        alreadyTracked: alreadyTracked || objectIsInstance,
-                    },
-                    objectIsInstance ? 'instance' : 'object'
-                ),
-                objectID,
-            };
-        }
-
-        // Handle classes and functions
-        else if (typeof object === 'function') {
-            let objectID = undefined;
-            if (!alreadyTracked) {
-                objectID = tracker.trackObject(object);
-                objectIDs.push(objectID);
-            }
-            return {
-                type: 'function',
-                structure: this.getStructureHelper(
-                    {
-                        ...state,
-                        alreadyTracked: true,
-                    },
-                    'function'
-                ),
-                instanceStructure: this.getStructureHelper(
-                    {
-                        ...state,
-                        object: object.prototype,
-                        alreadyTracked: true,
-                    },
-                    'instance'
-                ),
-                objectID,
+                type: 'reference',
+                objectID: tracker.trackObject(object, objectIDs),
             };
         }
 
         throw new Error(`Unsupported data type: ${typeof object}`);
     }
 
-    private getStructureHelper(
-        state: GetStructureState,
-        type: 'function' | 'instance' | 'object'
-    ): Record<string, Structure> {
-        const structure: Record<string, Structure> = {};
+    getComplexStructure(state: State): ComplexStructure {
+        const { object } = state;
+
+        // Handle objects
+        if (typeof object === 'object') {
+            const objectIsInstance = isInstance(object);
+            const funcs = this.getAllProps(
+                Object.getPrototypeOf(object),
+                'instance'
+            );
+            const map = this.getObjectMap(
+                state,
+                objectIsInstance ? 'instance' : 'object',
+                funcs
+            );
+            for (let func of funcs) {
+                delete map[func];
+            }
+            return {
+                type: 'object',
+                map,
+                funcs,
+            };
+        }
+
+        // Handle classes and functions
+        else if (typeof object === 'function') {
+            return {
+                type: 'function',
+                map: this.getObjectMap(state, 'function'),
+                instanceFuncs: this.getAllProps(object.prototype, 'instance'),
+            };
+        }
+
+        throw new Error(
+            `Object must have type object or function but got ${typeof object}`
+        );
+    }
+
+    private getObjectMap(
+        state: State,
+        type: 'function' | 'instance' | 'object',
+        excludeFuncs: string[] = []
+    ): ObjectMap {
+        const map: ObjectMap = {};
         const props = this.getAllProps(state.object, type);
         for (let prop of props) {
-            const struct = this.getStructureInternal({
+            if (excludeFuncs.includes(prop)) continue;
+            map[prop] = this.getValueInternal({
                 ...state,
                 object: state.object[prop],
             });
-            if (struct !== null) {
-                structure[prop] = struct;
-            }
         }
-        return structure;
+        return map;
     }
 
     getAllProps(

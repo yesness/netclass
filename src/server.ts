@@ -1,19 +1,21 @@
 import {
-    CallPath,
+    FunctionRef,
     Message,
     MessageCallFunc,
     MessageCreateInstance,
+    ObjectStructureMap,
     Packet,
     PartialPacket,
 } from './internalTypes';
-import Structurer, { Structure } from './structurer';
+import Structurer, { GetValueReturn } from './structurer';
 import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
-import { handleSocket, isInstance, SocketSend } from './util';
+import { handleSocket, SocketSend } from './util';
 
 class Client<T> {
     private idMap: Record<number, number>;
     private send: SocketSend<Packet>;
+    private syncedObjectIDs: number[];
 
     constructor(
         private id: number,
@@ -29,6 +31,7 @@ class Client<T> {
                 });
             },
         });
+        this.syncedObjectIDs = [];
     }
 
     private onMessage(msg: Message) {
@@ -62,7 +65,10 @@ class Client<T> {
             case 'get_structure':
                 return {
                     type: 'get_structure_result',
-                    structure: this.server.structure,
+                    value: this.server.structure.value,
+                    newObjects: this.getObjectStructuresAndSync(
+                        this.server.structure.objectIDs
+                    ),
                 };
             case 'call_func':
                 return await this.callFunc(msg);
@@ -72,87 +78,95 @@ class Client<T> {
     }
 
     private async callFunc(msg: MessageCallFunc): Promise<PartialPacket> {
-        if (msg.path.objectID != null && msg.path.objectID in this.idMap) {
-            msg.path.objectID = this.idMap[msg.path.objectID];
-        }
-        const stack = this.server.traverse(msg.path);
-        const [func, obj] = stack;
-        if (typeof func !== 'function') {
-            throw new Error('Path must point to a function');
-        }
-        let boundFunc = func;
-        if (obj != null && isInstance(obj)) {
-            boundFunc = func.bind(obj);
-        }
-        const maybeResult = boundFunc(...msg.args);
+        const func = this.getFunction(msg.functionRef);
+        const maybeResult = func(...msg.args);
         let result;
         if (maybeResult instanceof Promise) {
             result = await maybeResult;
         } else {
             result = maybeResult;
         }
-        const { structure, objectIDs } = Structurer.getStructure(
+        const { value, objectIDs } = Structurer.getValue(
             result,
             this.server.tracker
         );
         this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
         return {
             type: 'call_func_result',
-            structure,
+            value,
+            newObjects: this.getObjectStructuresAndSync(objectIDs),
         };
     }
 
     private async createInstance(
         msg: MessageCreateInstance
     ): Promise<PartialPacket> {
-        const [clazz] = this.server.traverse(msg.path);
-        if (typeof clazz !== 'function') {
-            throw new Error('Path must point to a class');
-        }
+        const clazz = this.getFunction(msg.functionRef);
         const instance = new clazz(...msg.args);
-        this.idMap[msg.instanceID] = this.server.tracker.trackObject(instance);
-        this.server.tracker.referenceObject(
-            { clientID: this.id },
-            this.idMap[msg.instanceID]
+        const objectIDs: number[] = [];
+        this.idMap[msg.instanceID] = this.server.tracker.trackObject(
+            instance,
+            objectIDs
         );
+        this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
         return {
-            type: 'success',
+            type: 'create_instance_result',
+            newObjects: this.getObjectStructuresAndSync(objectIDs),
         };
+    }
+
+    private getObjectStructuresAndSync(
+        objectIDs: number[]
+    ): ObjectStructureMap {
+        const map: ObjectStructureMap = {};
+        for (let objID of objectIDs) {
+            if (this.syncedObjectIDs.includes(objID)) continue;
+            this.syncedObjectIDs.push(objID);
+            map[objID] = this.server.tracker.getTrackedObject(objID).structure;
+        }
+        return map;
+    }
+
+    private getFunction(ref: FunctionRef): any {
+        const assertFunc = (obj: any) => {
+            if (typeof obj !== 'function') {
+                throw new Error('Invalid function ref: must point to function');
+            }
+            return obj;
+        };
+        if ('funcObjectID' in ref) {
+            return assertFunc(
+                this.server.tracker.getTrackedObject(ref.funcObjectID).object
+            );
+        } else {
+            let { objectID } = ref;
+            if (objectID in this.idMap) {
+                objectID = this.idMap[objectID];
+            }
+            const obj = this.server.tracker.getTrackedObject(objectID).object;
+            const func = assertFunc(obj[ref.funcName]);
+            return func.bind(obj);
+        }
     }
 }
 
 export default class NCServer<T> implements INCServer {
     debugLogging: boolean;
     tracker: Tracker;
-    structure: Structure;
+    structure: GetValueReturn;
     private nextClientID: number = 1;
 
     constructor(options: NCServerOptions<T>) {
         this.debugLogging = options.debugLogging ?? false;
         this.tracker = new Tracker();
-        const { structure, objectIDs } = Structurer.getStructure(
-            options.object,
-            this.tracker
+        this.structure = Structurer.getValue(options.object, this.tracker);
+        this.tracker.referenceObjects(
+            { type: 'persist' },
+            this.structure.objectIDs
         );
-        this.structure = structure;
-        this.tracker.referenceObjects({ type: 'persist' }, objectIDs);
     }
 
     connect(socket: INCSocket): void {
         new Client(this.nextClientID++, this, socket);
-    }
-
-    traverse({ path, objectID }: CallPath): any[] {
-        const stack: any[] = [this.tracker.getObject(objectID)];
-        for (let part of path) {
-            let obj = stack[0];
-            if (!(part in obj)) {
-                throw new Error(
-                    `Failed to resolve "${part}" in ${JSON.stringify(path)}`
-                );
-            }
-            stack.unshift(obj[part]);
-        }
-        return stack;
     }
 }

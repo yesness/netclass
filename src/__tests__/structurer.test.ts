@@ -1,4 +1,39 @@
-import Structurer from '../structurer';
+import Structurer, {
+    ComplexStructure,
+    ObjectMap,
+    StructureValue,
+} from '../structurer';
+import Tracker from '../tracker';
+
+function s(value: any): StructureValue {
+    return {
+        type: 'simple',
+        value,
+    };
+}
+function ref(objectID: number): StructureValue {
+    return {
+        type: 'reference',
+        objectID,
+    };
+}
+function o(map: ObjectMap, funcs: string[] = []): ComplexStructure {
+    return {
+        type: 'object',
+        map,
+        funcs,
+    };
+}
+function f(
+    map: ObjectMap = {},
+    instanceFuncs: string[] = []
+): ComplexStructure {
+    return {
+        type: 'function',
+        map,
+        instanceFuncs,
+    };
+}
 
 describe('Structurer', () => {
     test('constants', () => {
@@ -75,27 +110,7 @@ describe('Structurer', () => {
         });
     });
 
-    describe('getStructure', () => {
-        const s = (value: any) => ({
-            type: 'simple',
-            value,
-        });
-        const o = (structure: Object, objectID?: number) => ({
-            type: 'object',
-            structure,
-            objectID,
-        });
-        const f = (
-            structure: Object = {},
-            instanceStructure: Object = {},
-            objectID?: number
-        ) => ({
-            type: 'function',
-            structure,
-            instanceStructure,
-            objectID,
-        });
-
+    describe('getValue', () => {
         class A {
             name: string;
             constructor(name: string = 'a') {
@@ -105,24 +120,35 @@ describe('Structurer', () => {
             static getNextID() {}
             getName() {}
         }
-        const aStructure = (objectID: number) =>
-            f(
-                {
-                    nextID: s(1),
-                    getNextID: f(),
-                },
-                {
-                    getName: f(),
-                },
-                objectID
-            );
+        const aStructure = (startID: number) => ({
+            [startID]: {
+                obj: A,
+                struct: f(
+                    {
+                        nextID: s(1),
+                        getNextID: ref(startID + 1),
+                    },
+                    ['getName']
+                ),
+            },
+            [startID + 1]: {
+                obj: A.getNextID,
+                struct: f(),
+            },
+        });
 
         type Expected =
             | [any, any]
             | [
                   any, // input
-                  any, // expected structure
-                  any[] // tracked objects
+                  any, // expected value
+                  Record<
+                      number,
+                      {
+                          obj: any;
+                          struct: ComplexStructure;
+                      }
+                  > // expected tracked objects
               ];
 
         const cases: Record<string, Expected | (() => Expected)> = {
@@ -131,16 +157,34 @@ describe('Structurer', () => {
             'simple boolean': [true, s(true)],
             'simple undefined': [undefined, s(undefined)],
             'simple null': [null, s(null)],
-            object: [
-                { a: 1, b: 'yay' },
-                o({
-                    a: s(1),
-                    b: s('yay'),
-                }),
-            ],
+            object: () => {
+                const obj = { a: 1, b: 'yay' };
+                return [
+                    obj,
+                    ref(1),
+                    {
+                        1: {
+                            obj,
+                            struct: o({
+                                a: s(1),
+                                b: s('yay'),
+                            }),
+                        },
+                    },
+                ];
+            },
             function: () => {
                 function func() {}
-                return [func, f({}, {}, 1), [func]];
+                return [
+                    func,
+                    ref(1),
+                    {
+                        1: {
+                            obj: func,
+                            struct: f(),
+                        },
+                    },
+                ];
             },
             function2: () => {
                 function A(this: any) {
@@ -151,50 +195,61 @@ describe('Structurer', () => {
                 A.getNextID = function () {};
                 return [
                     A,
-                    f(
-                        {
-                            nextID: s(1),
-                            getNextID: f(),
+                    ref(1),
+                    {
+                        1: {
+                            obj: A,
+                            struct: f(
+                                {
+                                    nextID: s(1),
+                                    getNextID: ref(2),
+                                },
+                                ['getName']
+                            ),
                         },
-                        { getName: f() }, // 'name' should NOT be included since it isn't part of the prototype
-                        1
-                    ),
-                    [A],
+                        2: {
+                            obj: A.getNextID,
+                            struct: f(),
+                        },
+                    },
                 ];
             },
-            class: [A, aStructure(1), [A]],
+            class: [A, ref(1), aStructure(1)],
             instance: () => {
                 const a = new A('bob');
                 return [
                     a,
-                    o(
-                        {
-                            name: s('bob'),
-                            getName: f(),
+                    ref(1),
+                    {
+                        1: {
+                            obj: a,
+                            struct: o({ name: s('bob') }, ['getName']),
                         },
-                        1
-                    ),
-                    [a],
+                    },
                 ];
             },
             'object with class and instance': () => {
-                const instance = new A('rob');
+                const obj = {
+                    class: A,
+                    instance: new A('rob'),
+                };
                 return [
+                    obj,
+                    ref(1),
                     {
-                        class: A,
-                        instance,
+                        1: {
+                            obj,
+                            struct: o({
+                                class: ref(2),
+                                instance: ref(4),
+                            }),
+                        },
+                        ...aStructure(2),
+                        4: {
+                            obj: obj.instance,
+                            struct: o({ name: s('rob') }, ['getName']),
+                        },
                     },
-                    o({
-                        class: aStructure(1),
-                        instance: o(
-                            {
-                                name: s('rob'),
-                                getName: f(),
-                            },
-                            2
-                        ),
-                    }),
-                    [A, instance],
                 ];
             },
         };
@@ -207,23 +262,25 @@ describe('Structurer', () => {
             let [input, expected] = testCase;
             const trackedObjects = testCase[2] ?? [];
             test(name, () => {
-                let nextID = 1;
-                const tracker: any = {
-                    trackObject: (object: any) => {
-                        expect(object).toBe(trackedObjects[nextID - 1]);
-                        return nextID++;
-                    },
-                };
-                const { structure, objectIDs } = Structurer.getStructure(
+                const tracker = new Tracker();
+                const anyTracker: any = tracker;
+                const { value, objectIDs } = Structurer.getValue(
                     input,
                     tracker
                 );
-                expect(structure).toEqual(expected);
-                expect(nextID).toBe(trackedObjects.length + 1);
-                const expectedObjectIDs = new Array(trackedObjects.length)
+                expect(value).toEqual(expected);
+                const numTrackedObjects = Object.keys(trackedObjects).length;
+                expect(anyTracker.nextID).toBe(numTrackedObjects + 1);
+                for (let [strID, expected] of Object.entries(trackedObjects)) {
+                    const objectID = parseInt(strID);
+                    const trackedObject = tracker.getTrackedObject(objectID);
+                    expect(trackedObject.object).toBe(expected.obj);
+                    expect(trackedObject.structure).toEqual(expected.struct);
+                }
+                const expectedObjectIDs = new Array(numTrackedObjects)
                     .fill(null)
                     .map((_, idx) => idx + 1);
-                expect(objectIDs).toEqual(expectedObjectIDs);
+                expect(objectIDs.sort()).toEqual(expectedObjectIDs);
             });
         });
     });

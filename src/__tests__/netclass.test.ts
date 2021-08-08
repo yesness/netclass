@@ -219,12 +219,13 @@ describe('NetClass', () => {
         class B {
             static a: A = new A('hello');
             static async get(): Promise<A> {
-                return this.a;
+                return B.a;
             }
         }
         const [s1, s2] = getSockets();
         const server = NetClass.createServer<typeof B>({
             object: B,
+            debugLogging: true,
         });
         server.connect(s1);
         const client = await NetClass.createClient<typeof B>(s2);
@@ -233,7 +234,6 @@ describe('NetClass', () => {
         expect(x.name).toBe('hello');
         const y = await ClientB.get();
         expect(y.name).toBe('hello');
-        // TODO this would ideally be true
-        expect(x === y).toBeFalsy();
+        expect(x === y).toBeTruthy();
     });
 });

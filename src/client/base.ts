@@ -1,5 +1,9 @@
-import { Message, Packet, PartialMessage } from '../internalTypes';
-import { Structure } from '../structurer';
+import {
+    Message,
+    Packet,
+    PacketStructure,
+    PartialMessage,
+} from '../internalTypes';
 import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
 
@@ -54,11 +58,11 @@ export default class BaseClient {
         resolve(packet);
     }
 
-    async getStructure(): Promise<Structure> {
+    async getStructure(): Promise<PacketStructure> {
         const packet = await this.send({ type: 'get_structure' });
         if (packet.type !== 'get_structure_result') {
             throw new Error('Invalid response packet');
         }
-        return packet.structure;
+        return packet;
     }
 }

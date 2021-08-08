@@ -1,57 +1,77 @@
-import { CallPath, MessageCreateInstance } from '../internalTypes';
-import { FunctionStructure, Structure } from '../structurer';
+import {
+    FunctionRef,
+    MessageCreateInstance,
+    ObjectStructureMap,
+    PacketStructure,
+} from '../internalTypes';
+import {
+    ComplexStructure,
+    FunctionStructure,
+    ObjectMap,
+    ObjectStructure,
+    StructureValue,
+} from '../structurer';
 import { INCClient, INCSocket, NCClientOptions } from '../types';
 import BaseClient from './base';
 
+type UpsertState = {
+    map: ObjectStructureMap;
+    completedIDs: number[];
+};
+
 class NCClient<T> implements INCClient<T> {
     private nextID: number;
+    private objects: Record<number, any>;
     private proxy: T;
     private pendingObjects: Array<Promise<void>> = [];
 
-    constructor(private client: BaseClient, structure: Structure) {
+    constructor(private client: BaseClient, structure: PacketStructure) {
         this.nextID = 1;
-        this.proxy = this.buildProxy(structure, null);
+        this.objects = {};
+        this.proxy = this.getProxy(structure.value, {
+            map: structure.newObjects,
+            completedIDs: [],
+        });
     }
 
-    private buildProxy(structure: Structure, path: CallPath | null): any {
-        switch (structure.type) {
-            case 'function':
-                return this.buildFunctionProxy(
-                    structure,
-                    this.assertPath(path, structure)
+    private getProxy(value: StructureValue, upsert: UpsertState): any {
+        if (value.type === 'simple') {
+            return value.value;
+        } else {
+            if (
+                value.objectID in upsert.map &&
+                !upsert.completedIDs.includes(value.objectID)
+            ) {
+                this.objects[value.objectID] = this.buildProxy(
+                    upsert.map[value.objectID],
+                    upsert,
+                    value.objectID
                 );
-            case 'object':
-                return this.addStructure(
-                    {},
-                    structure.structure,
-                    this.maybePath(path, structure)
-                );
-            case 'simple':
-                return structure.value;
+                upsert.completedIDs.push(value.objectID);
+            }
+            return this.objects[value.objectID];
         }
     }
 
-    private addStructure(
-        proxy: any,
-        struct: Record<string, Structure>,
-        path: CallPath | null
+    private buildProxy(
+        structure: ComplexStructure,
+        upsert: UpsertState,
+        objectID: number
     ): any {
-        Object.keys(struct).forEach((key) => {
-            let keyPath = null;
-            if (path !== null) {
-                keyPath = {
-                    objectID: path.objectID,
-                    path: [...path.path, key],
-                };
-            }
-            proxy[key] = this.buildProxy(struct[key], keyPath);
-        });
-        return proxy;
+        switch (structure.type) {
+            case 'function':
+                return this.buildFunctionProxy(structure, upsert, {
+                    funcObjectID: objectID,
+                });
+            case 'object':
+                return this.buildObjectProxy(structure, upsert, objectID);
+        }
     }
 
     private buildFunctionProxy(
         structure: FunctionStructure,
-        path: CallPath
+        upsert: UpsertState,
+        functionRef: FunctionRef
     ): any {
         const _this = this;
         function ProxyFunc(...args: any[]) {
@@ -61,50 +81,52 @@ class NCClient<T> implements INCClient<T> {
                 _this.pendingObjects.push(
                     _this.createInstance({
                         instanceID,
-                        path,
+                        functionRef,
                         args,
                     })
                 );
-                return _this.buildProxy(
-                    {
-                        type: 'object',
-                        structure: structure.instanceStructure,
-                    },
-                    {
-                        objectID: instanceID,
-                        path: [],
-                    }
-                );
+                return _this.addFuncs({}, structure.instanceFuncs, instanceID);
             } else {
-                return _this.callFunc(path, args);
+                return _this.callFunc(functionRef, args);
             }
         }
-        return this.addStructure(ProxyFunc, structure.structure, path);
+        return this.addStructure(ProxyFunc, structure.map, upsert);
     }
 
-    private assertPath(
-        path: CallPath | null,
-        structure: { objectID?: number }
-    ): CallPath {
-        const ret = this.maybePath(path, structure);
-        if (ret === null) {
-            throw new Error('Path cannot be null');
-        }
-        return ret;
+    private buildObjectProxy(
+        structure: ObjectStructure,
+        upsert: UpsertState,
+        objectID: number
+    ): any {
+        const proxy: any = {};
+        this.addStructure(proxy, structure.map, upsert);
+        this.addFuncs(proxy, structure.funcs, objectID);
+        return proxy;
     }
 
-    private maybePath(
-        path: CallPath | null,
-        { objectID }: { objectID?: number }
-    ): CallPath | null {
-        if (objectID != null) {
-            return {
-                path: [],
-                objectID,
-            };
-        } else {
-            return path;
+    private addStructure(proxy: any, map: ObjectMap, upsert: UpsertState): any {
+        Object.keys(map).forEach((key) => {
+            proxy[key] = this.getProxy(map[key], upsert);
+        });
+        return proxy;
+    }
+
+    private addFuncs(proxy: any, funcs: string[], objectID: number): any {
+        for (let func of funcs) {
+            proxy[func] = this.buildFunctionProxy(
+                {
+                    type: 'function',
+                    map: {},
+                    instanceFuncs: [],
+                },
+                {
+                    map: {},
+                    completedIDs: [],
+                },
+                { objectID, funcName: func }
+            );
         }
+        return proxy;
     }
 
     getObject(): T {
@@ -118,28 +140,35 @@ class NCClient<T> implements INCClient<T> {
         );
     }
 
-    private async callFunc(path: CallPath, args: any[]): Promise<any> {
+    private async callFunc(
+        functionRef: FunctionRef,
+        args: any[]
+    ): Promise<any> {
         const packet = await this.client.send({
             type: 'call_func',
-            path,
+            functionRef,
             args,
         });
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');
         }
-        return this.buildProxy(packet.structure, null);
+        return this.getProxy(packet.value, {
+            map: packet.newObjects,
+            completedIDs: [],
+        });
     }
 
     private async createInstance(
-        args: Pick<MessageCreateInstance, 'instanceID' | 'path' | 'args'>
+        args: Pick<MessageCreateInstance, 'instanceID' | 'functionRef' | 'args'>
     ): Promise<void> {
         const packet = await this.client.send({
             type: 'create_instance',
             ...args,
         });
-        if (packet.type !== 'success') {
+        if (packet.type !== 'create_instance_result') {
             throw new Error('Invalid response packet');
         }
+        // TODO handle newObjects
     }
 }
 
