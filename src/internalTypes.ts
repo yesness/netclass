@@ -39,15 +39,16 @@ export type Message = PartialMessage & MsgID;
 
 export type ObjectStructureMap = Record<number, ComplexStructure>;
 
-export type PacketStructure = {
-    type: 'get_structure_result' | 'call_func_result';
+export type ValueAndObjects = {
     value: StructureValue;
     newObjects: ObjectStructureMap;
 };
 
-export type PacketCreateInstanceResult = {
-    type: 'create_instance_result';
-    newObjects: ObjectStructureMap;
+export type PacketStructure = ValueAndObjects & {
+    type:
+        | 'get_structure_result'
+        | 'call_func_result'
+        | 'create_instance_result';
 };
 
 export type PacketError = {
@@ -55,9 +56,6 @@ export type PacketError = {
     error: string;
 };
 
-export type PartialPacket =
-    | PacketStructure
-    | PacketCreateInstanceResult
-    | PacketError;
+export type PartialPacket = PacketStructure | PacketError;
 
 export type Packet = PartialPacket & MsgID;

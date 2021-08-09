@@ -3,6 +3,7 @@ import {
     MessageCreateInstance,
     ObjectStructureMap,
     PacketStructure,
+    ValueAndObjects,
 } from '../internalTypes';
 import {
     ComplexStructure,
@@ -23,7 +24,13 @@ class NCClient<T> implements INCClient<T> {
     private nextID: number;
     private objects: Record<number, any>;
     private proxy: T;
-    private pendingObjects: Array<Promise<void>> = [];
+    private pendingObjects: Record<
+        number,
+        {
+            object: any;
+            promise: Promise<void>;
+        }
+    > = {};
 
     constructor(private client: BaseClient, structure: PacketStructure) {
         this.nextID = 1;
@@ -77,15 +84,34 @@ class NCClient<T> implements INCClient<T> {
         function ProxyFunc(...args: any[]) {
             if (new.target != null) {
                 const instanceID = _this.nextID++;
-                // TODO handle the promise
-                _this.pendingObjects.push(
-                    _this.createInstance({
+                const tmpInstance = _this.addFuncs(
+                    {},
+                    structure.instanceFuncs,
+                    instanceID
+                );
+                const createInstance = async () => {
+                    const result = await _this.createInstance({
                         instanceID,
                         functionRef,
                         args,
-                    })
-                );
-                return _this.addFuncs({}, structure.instanceFuncs, instanceID);
+                    });
+                    const { value } = result;
+                    if (value.type !== 'reference') {
+                        throw new Error('Must be reference value');
+                    }
+                    const newObject = _this.convertValueAndObjects(result);
+                    // Merge newObject into temporary object
+                    for (let [key, val] of Object.entries(newObject)) {
+                        tmpInstance[key] = val;
+                    }
+                    _this.objects[value.objectID] = tmpInstance;
+                    delete _this.pendingObjects[instanceID];
+                };
+                _this.pendingObjects[instanceID] = {
+                    object: tmpInstance,
+                    promise: createInstance(),
+                };
+                return tmpInstance;
             } else {
                 return _this.callFunc(functionRef, args);
             }
@@ -134,10 +160,21 @@ class NCClient<T> implements INCClient<T> {
     }
 
     async resolveAll(): Promise<void> {
-        console.log(this.pendingObjects.length);
-        await Promise.all(
-            this.pendingObjects.splice(0, this.pendingObjects.length)
+        const instanceIDs = Object.keys(this.pendingObjects).map((id) =>
+            parseInt(id)
         );
+        const proms = instanceIDs.map(
+            (instanceID) => this.pendingObjects[instanceID].promise
+        );
+        await Promise.all(proms);
+        const failedIDs = instanceIDs.filter((id) => id in this.pendingObjects);
+        if (failedIDs.length > 0) {
+            throw new Error(
+                `Failed to resolve pending objects with IDs: ${JSON.stringify(
+                    failedIDs
+                )}`
+            );
+        }
     }
 
     private async callFunc(
@@ -152,15 +189,12 @@ class NCClient<T> implements INCClient<T> {
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');
         }
-        return this.getProxy(packet.value, {
-            map: packet.newObjects,
-            completedIDs: [],
-        });
+        return this.convertValueAndObjects(packet);
     }
 
     private async createInstance(
         args: Pick<MessageCreateInstance, 'instanceID' | 'functionRef' | 'args'>
-    ): Promise<void> {
+    ): Promise<ValueAndObjects> {
         const packet = await this.client.send({
             type: 'create_instance',
             ...args,
@@ -168,7 +202,17 @@ class NCClient<T> implements INCClient<T> {
         if (packet.type !== 'create_instance_result') {
             throw new Error('Invalid response packet');
         }
-        // TODO handle newObjects
+        return packet;
+    }
+
+    private convertValueAndObjects({
+        value,
+        newObjects,
+    }: ValueAndObjects): any {
+        return this.getProxy(value, {
+            map: newObjects,
+            completedIDs: [],
+        });
     }
 }
 

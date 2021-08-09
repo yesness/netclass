@@ -4,7 +4,7 @@ import { INCServer, INCSocket } from '../types';
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
 
-function getSockets(): [INCSocket, INCSocket] {
+function getSockets(delay: number = 1): [INCSocket, INCSocket] {
     const s1data: DataCB[] = [];
     const s2data: DataCB[] = [];
     const s1close: CloseCB[] = [];
@@ -12,7 +12,7 @@ function getSockets(): [INCSocket, INCSocket] {
     const onClose = () => s1close.concat(s2close).forEach((cb) => cb());
     const s1: INCSocket = {
         send: (data: Buffer) => {
-            s2data.forEach((cb) => cb(data));
+            setTimeout(() => s2data.forEach((cb) => cb(data)), delay);
         },
         close: onClose,
         onData: (cb: DataCB) => {
@@ -24,7 +24,7 @@ function getSockets(): [INCSocket, INCSocket] {
     };
     const s2: INCSocket = {
         send: (data: Buffer) => {
-            s1data.forEach((cb) => cb(data));
+            setTimeout(() => s1data.forEach((cb) => cb(data)), delay);
         },
         close: onClose,
         onData: (cb: DataCB) => {
@@ -43,7 +43,7 @@ function getNumTrackedObjects(server: INCServer): number {
     return Object.keys(objects).length;
 }
 
-describe('NetClass', () => {
+describe('NetClass - general', () => {
     test('object with functions', async () => {
         type Obj = {
             set: (val: string) => Promise<void>;
@@ -66,10 +66,11 @@ describe('NetClass', () => {
         server.connect(s1);
         const client = await NetClass.createClient<Obj>(s2);
         const clientObject = client.getObject();
-        expect(clientObject.get()).resolves.toBe('start');
-        expect(clientObject.set('newval')).resolves.toBeUndefined();
+
+        expect(await clientObject.get()).toBe('start');
+        await clientObject.set('newval');
         expect(value).toBe('newval');
-        expect(clientObject.get()).resolves.toBe('newval');
+        expect(await clientObject.get()).toBe('newval');
     });
 
     test('class with static functions', async () => {
@@ -102,16 +103,16 @@ describe('NetClass', () => {
         server.connect(s1);
         const client = await NetClass.createClient<IFoo>(s2);
         const ClientFoo = client.getObject();
-        expect(ClientFoo.get('key1')).resolves.toBeNull();
-        expect(ClientFoo.set('key2', 'val2')).resolves.toBeUndefined();
+        expect(await ClientFoo.get('key1')).toBeNull();
+        await ClientFoo.set('key2', 'val2');
         expect(ServerFoo.values).toEqual({ key2: 'val2' });
-        expect(ClientFoo.get('key1')).resolves.toBeNull();
-        expect(ClientFoo.get('key2')).resolves.toBe('val2');
+        expect(await ClientFoo.get('key1')).toBeNull();
+        expect(await ClientFoo.get('key2')).toBe('val2');
 
         expect(ServerFoo.marked).toBeFalsy();
-        expect(ClientFoo.isMarked()).resolves.toBeFalsy();
-        expect(ClientFoo.mark()).resolves.toBeUndefined();
-        expect(ClientFoo.isMarked()).resolves.toBeTruthy();
+        expect(await ClientFoo.isMarked()).toBeFalsy();
+        await ClientFoo.mark();
+        expect(await ClientFoo.isMarked()).toBeTruthy();
         expect(ServerFoo.marked).toBeTruthy();
     });
 
@@ -155,6 +156,7 @@ describe('NetClass', () => {
         const ClientA = client.getObject();
         expect(getNumTrackedObjects(server)).toBe(1);
         new ClientA();
+        await client.resolveAll();
         expect(getNumTrackedObjects(server)).toBe(2);
         s1.close();
         expect(getNumTrackedObjects(server)).toBe(1);
@@ -193,6 +195,7 @@ describe('NetClass', () => {
         const ClientPeople = client.getObject();
         assertNumTracked(1);
         const ppl = new ClientPeople();
+        await client.resolveAll();
         assertNumTracked(2);
         expect(ppl.get()).resolves.toBeNull();
         expect(ppl.set('bob')).resolves.toBeUndefined();
@@ -225,7 +228,6 @@ describe('NetClass', () => {
         const [s1, s2] = getSockets();
         const server = NetClass.createServer<typeof B>({
             object: B,
-            debugLogging: true,
         });
         server.connect(s1);
         const client = await NetClass.createClient<typeof B>(s2);
@@ -235,5 +237,59 @@ describe('NetClass', () => {
         const y = await ClientB.get();
         expect(y.name).toBe('hello');
         expect(x === y).toBeTruthy();
+    });
+});
+
+async function createInstanceTest(delay: number = 1) {
+    class A {
+        constructor(public name: string) {}
+        async getName(): Promise<string> {
+            return this.name;
+        }
+    }
+    const [s1, s2] = getSockets(delay);
+    const server = NetClass.createServer<typeof A>({
+        object: A,
+    });
+    server.connect(s1);
+    const client = await NetClass.createClient<typeof A>(s2);
+    const ClientA = client.getObject();
+    return { ClientA, client };
+}
+
+function sleep(time: number) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+}
+
+describe('NetClass - properties', () => {
+    test('instance properties on create - resolveAll', async () => {
+        const { ClientA, client } = await createInstanceTest();
+        const a = new ClientA('alice');
+        expect(a.name).toBeUndefined();
+        await client.resolveAll();
+        expect(a.name).toBe('alice');
+        expect(a.getName()).resolves.toBe('alice');
+    });
+
+    test('instance properties on create - time', async () => {
+        const { ClientA, client } = await createInstanceTest(25);
+        const a = new ClientA('alice');
+        // t = 0, properties not set yet
+        expect(a.name).toBeUndefined();
+        await sleep(25);
+        // t = 25, server just received create msg, properties not set yet
+        expect(a.name).toBeUndefined();
+        await sleep(50);
+        // t = 75, we received instance message
+        expect(a.name).toBe('alice');
+    });
+
+    test('instance properties on create - async function', async () => {
+        const { ClientA, client } = await createInstanceTest(25);
+        const a = new ClientA('alice');
+        expect(a.name).toBeUndefined();
+        const name = await a.getName();
+        expect(a.name).toBe('alice');
+        expect(name).toBe('alice');
     });
 });

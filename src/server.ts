@@ -103,14 +103,18 @@ class Client<T> {
     ): Promise<PartialPacket> {
         const clazz = this.getFunction(msg.functionRef);
         const instance = new clazz(...msg.args);
-        const objectIDs: number[] = [];
-        this.idMap[msg.instanceID] = this.server.tracker.trackObject(
+        const { value, objectIDs } = Structurer.getValue(
             instance,
-            objectIDs
+            this.server.tracker
         );
+        if (value.type !== 'reference') {
+            throw new Error('Must get reference');
+        }
         this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
+        this.idMap[msg.instanceID] = value.objectID;
         return {
             type: 'create_instance_result',
+            value,
             newObjects: this.getObjectStructuresAndSync(objectIDs),
         };
     }
