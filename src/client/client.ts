@@ -123,7 +123,6 @@ class NCClient<T> implements INCClient<T> {
                 {
                     type: 'function',
                     map: {},
-                    instanceFuncs: [],
                 },
                 {
                     map: {},

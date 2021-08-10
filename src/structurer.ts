@@ -16,7 +16,6 @@ export type ObjectMap = Record<string, StructureValue>;
 export type FunctionStructure = {
     type: 'function';
     map: ObjectMap;
-    instanceFuncs: string[];
 };
 
 export type ObjectStructure = {
@@ -139,11 +138,6 @@ class StructurerClass {
             return {
                 type: 'function',
                 map: this.getObjectMap(state, 'function'),
-                instanceFuncs: this.getAllProps(
-                    object.prototype,
-                    'instance',
-                    state.tracker.idProperty
-                ),
             };
         }
 

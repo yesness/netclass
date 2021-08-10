@@ -34,14 +34,10 @@ function arr(values: StructureValue[], map: ObjectMap = {}): ComplexStructure {
     };
 }
 
-function f(
-    map: ObjectMap = {},
-    instanceFuncs: string[] = []
-): ComplexStructure {
+function f(map: ObjectMap = {}): ComplexStructure {
     return {
         type: 'function',
         map,
-        instanceFuncs,
     };
 }
 
@@ -134,13 +130,10 @@ describe('Structurer', () => {
         const aStructure = (A: any, startID: number) => ({
             [startID]: {
                 obj: A,
-                struct: f(
-                    {
-                        nextID: s(1),
-                        getNextID: ref(startID + 1),
-                    },
-                    ['getName']
-                ),
+                struct: f({
+                    nextID: s(1),
+                    getNextID: ref(startID + 1),
+                }),
             },
             [startID + 1]: {
                 obj: A.getNextID,
@@ -210,13 +203,10 @@ describe('Structurer', () => {
                     {
                         1: {
                             obj: A,
-                            struct: f(
-                                {
-                                    nextID: s(1),
-                                    getNextID: ref(2),
-                                },
-                                ['getName']
-                            ),
+                            struct: f({
+                                nextID: s(1),
+                                getNextID: ref(2),
+                            }),
                         },
                         2: {
                             obj: A.getNextID,
@@ -342,7 +332,7 @@ describe('Structurer', () => {
                         },
                         4: {
                             obj: A,
-                            struct: f({}, ['getName']),
+                            struct: f({}),
                         },
                         5: {
                             obj: obj.prop,
