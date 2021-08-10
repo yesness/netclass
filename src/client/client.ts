@@ -1,7 +1,7 @@
 import {
     FunctionRef,
     ObjectStructureMap,
-    PacketStructure,
+    PacketInit,
     ValueAndObjects,
 } from '../internalTypes';
 import {
@@ -22,13 +22,18 @@ type UpsertState = {
 class NCClient<T> implements INCClient<T> {
     private objects: Record<number, any>;
     private proxy: T;
+    private idProperty: string;
 
-    constructor(private client: BaseClient, structure: PacketStructure) {
+    constructor(
+        private client: BaseClient,
+        { structure, idProperty }: PacketInit
+    ) {
         this.objects = {};
         this.proxy = this.getProxy(structure.value, {
             map: structure.newObjects,
             completedIDs: [],
         });
+        this.idProperty = idProperty;
     }
 
     private getProxy(value: StructureValue, upsert: UpsertState): any {
@@ -141,7 +146,7 @@ class NCClient<T> implements INCClient<T> {
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');
         }
-        return this.convertValueAndObjects(packet);
+        return this.convertValueAndObjects(packet.result);
     }
 
     private convertValueAndObjects({
@@ -160,6 +165,6 @@ export default async function initClient<T>(
     options: NCClientOptions
 ): Promise<NCClient<T>> {
     const client = new BaseClient(socket, options?.debugLogging ?? false);
-    const structure = await client.getStructure();
-    return new NCClient(client, structure);
+    const initPacket = await client.init();
+    return new NCClient(client, initPacket);
 }

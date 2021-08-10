@@ -13,8 +13,8 @@ export type FunctionRef =
           funcObjectID: number;
       };
 
-export type MessageGetStructure = {
-    type: 'get_structure';
+export type MessageInit = {
+    type: 'init';
 };
 
 export type MessageCallFunc = {
@@ -23,7 +23,7 @@ export type MessageCallFunc = {
     args: any[];
 };
 
-export type PartialMessage = MessageGetStructure | MessageCallFunc;
+export type PartialMessage = MessageInit | MessageCallFunc;
 
 export type Message = PartialMessage & MsgID;
 
@@ -34,8 +34,15 @@ export type ValueAndObjects = {
     newObjects: ObjectStructureMap;
 };
 
-export type PacketStructure = ValueAndObjects & {
-    type: 'get_structure_result' | 'call_func_result';
+export type PacketInit = {
+    type: 'init';
+    structure: ValueAndObjects;
+    idProperty: string;
+};
+
+export type PacketCallFuncResult = {
+    type: 'call_func_result';
+    result: ValueAndObjects;
 };
 
 export type PacketError = {
@@ -43,6 +50,6 @@ export type PacketError = {
     error: string;
 };
 
-export type PartialPacket = PacketStructure | PacketError;
+export type PartialPacket = PacketInit | PacketCallFuncResult | PacketError;
 
 export type Packet = PartialPacket & MsgID;

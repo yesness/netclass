@@ -61,13 +61,16 @@ class Client<T> {
 
     private async messageHandler(msg: Message): Promise<PartialPacket> {
         switch (msg.type) {
-            case 'get_structure':
+            case 'init':
                 return {
-                    type: 'get_structure_result',
-                    value: this.server.structure.value,
-                    newObjects: this.getObjectStructuresAndSync(
-                        this.server.structure.objectIDs
-                    ),
+                    type: 'init',
+                    structure: {
+                        value: this.server.structure.value,
+                        newObjects: this.getObjectStructuresAndSync(
+                            this.server.structure.objectIDs
+                        ),
+                    },
+                    idProperty: this.server.tracker.idProperty,
                 };
             case 'call_func':
                 return await this.callFunc(msg);
@@ -90,8 +93,10 @@ class Client<T> {
         this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
         return {
             type: 'call_func_result',
-            value,
-            newObjects: this.getObjectStructuresAndSync(objectIDs),
+            result: {
+                value,
+                newObjects: this.getObjectStructuresAndSync(objectIDs),
+            },
         };
     }
 
