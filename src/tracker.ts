@@ -19,15 +19,16 @@ export default class Tracker {
     private refs: Record<string, number[]> = {};
     private nextID: number = 1;
 
+    constructor(public idProperty: string) {}
+
     trackObject(object: any, objectIDs: number[]): number {
-        for (let strID of Object.keys(this.objects)) {
-            const objID = parseInt(strID);
-            if (this.objects[objID].object === object) {
-                this.addAllObjectDependencies(objID, objectIDs);
-                return objID;
-            }
+        if (this.idProperty in object) {
+            const objID = object[this.idProperty];
+            this.addAllObjectDependencies(objID, objectIDs);
+            return objID;
         }
         const objID = this.nextID++;
+        object[this.idProperty] = objID;
         this.objects[objID] = {
             object,
             structure: Structurer.getComplexStructure({

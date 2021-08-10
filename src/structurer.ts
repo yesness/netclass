@@ -119,7 +119,8 @@ class StructurerClass {
                 if (objectIsInstance) {
                     funcs = this.getAllProps(
                         Object.getPrototypeOf(object),
-                        'instance'
+                        'instance',
+                        state.tracker.idProperty
                     );
                     type = 'instance';
                 }
@@ -138,7 +139,11 @@ class StructurerClass {
             return {
                 type: 'function',
                 map: this.getObjectMap(state, 'function'),
-                instanceFuncs: this.getAllProps(object.prototype, 'instance'),
+                instanceFuncs: this.getAllProps(
+                    object.prototype,
+                    'instance',
+                    state.tracker.idProperty
+                ),
             };
         }
 
@@ -153,7 +158,11 @@ class StructurerClass {
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
-        const props = this.getAllProps(state.object, type);
+        const props = this.getAllProps(
+            state.object,
+            type,
+            state.tracker.idProperty
+        );
         for (let prop of props) {
             if (excludeFuncs.includes(prop)) continue;
             map[prop] = this.getValueInternal({
@@ -166,7 +175,8 @@ class StructurerClass {
 
     getAllProps(
         toCheck: any,
-        type: 'function' | 'instance' | 'object' | 'array'
+        type: 'function' | 'instance' | 'object' | 'array',
+        excludeProp?: string
     ): string[] {
         const props: string[] = [];
         let obj = toCheck;
@@ -188,7 +198,8 @@ class StructurerClass {
                     this.defaultInstanceProps.includes(prop)) ||
                 (type === 'array' &&
                     (this.defaultArrayProps.includes(prop) ||
-                        !isNaN(parseInt(prop))))
+                        !isNaN(parseInt(prop)))) ||
+                prop === excludeProp
             ) {
                 return false;
             }

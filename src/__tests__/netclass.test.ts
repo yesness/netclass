@@ -43,8 +43,10 @@ function getNumTrackedObjects(server: INCServer): number {
     return Object.keys(objects).length;
 }
 
-function sleep(time: number) {
-    return new Promise((resolve) => setTimeout(resolve, time));
+function clean(obj: any) {
+    const clone = { ...obj };
+    delete clone['_netclass_id'];
+    return clone;
 }
 
 describe('NetClass - general', () => {
@@ -109,7 +111,7 @@ describe('NetClass - general', () => {
         const ClientFoo = client.getObject();
         expect(await ClientFoo.get('key1')).toBeNull();
         await ClientFoo.set('key2', 'val2');
-        expect(ServerFoo.values).toEqual({ key2: 'val2' });
+        expect(clean(ServerFoo.values)).toEqual({ key2: 'val2' });
         expect(await ClientFoo.get('key1')).toBeNull();
         expect(await ClientFoo.get('key2')).toBe('val2');
 

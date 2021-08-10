@@ -121,16 +121,17 @@ describe('Structurer', () => {
     });
 
     describe('getValue', () => {
-        class A {
-            name: string;
-            constructor(name: string = 'a') {
-                this.name = name;
-            }
-            static nextID = 1;
-            static getNextID() {}
-            getName() {}
-        }
-        const aStructure = (startID: number) => ({
+        const AGen = () =>
+            class A {
+                name: string;
+                constructor(name: string = 'a') {
+                    this.name = name;
+                }
+                static nextID = 1;
+                static getNextID() {}
+                getName() {}
+            };
+        const aStructure = (A: any, startID: number) => ({
             [startID]: {
                 obj: A,
                 struct: f(
@@ -224,8 +225,12 @@ describe('Structurer', () => {
                     },
                 ];
             },
-            class: [A, ref(1), aStructure(1)],
+            class: () => {
+                const A = AGen();
+                return [A, ref(1), aStructure(A, 1)];
+            },
             instance: () => {
+                const A = AGen();
                 const a = new A('bob');
                 return [
                     a,
@@ -239,6 +244,7 @@ describe('Structurer', () => {
                 ];
             },
             'object with class and instance': () => {
+                const A = AGen();
                 const obj = {
                     class: A,
                     instance: new A('rob'),
@@ -254,7 +260,7 @@ describe('Structurer', () => {
                                 instance: ref(4),
                             }),
                         },
-                        ...aStructure(2),
+                        ...aStructure(A, 2),
                         4: {
                             obj: obj.instance,
                             struct: o({ name: s('rob') }, ['getName']),
@@ -360,7 +366,7 @@ describe('Structurer', () => {
             let [input, expected] = testCase;
             const trackedObjects = testCase[2] ?? [];
             test(name, () => {
-                const tracker = new Tracker();
+                const tracker = new Tracker('_netclass_id');
                 const anyTracker: any = tracker;
                 const { value, objectIDs } = Structurer.getValue(
                     input,

@@ -1,7 +1,7 @@
 export type NCServerOptions<T> = {
     object: T;
+    objectIDPropertyName?: string; // default: "_netclass_id"
     debugLogging?: boolean;
-    garbageCollectInterval?: number; // in milliseconds, defaults to 10 minutes
 };
 
 export type NCClientOptions = {
