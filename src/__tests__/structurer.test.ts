@@ -22,8 +22,18 @@ function o(map: ObjectMap, funcs: string[] = []): ComplexStructure {
         type: 'object',
         map,
         funcs,
+        array: null,
     };
 }
+function arr(values: StructureValue[], map: ObjectMap = {}): ComplexStructure {
+    return {
+        type: 'object',
+        map,
+        funcs: [],
+        array: values,
+    };
+}
+
 function f(
     map: ObjectMap = {},
     instanceFuncs: string[] = []
@@ -248,6 +258,94 @@ describe('Structurer', () => {
                         4: {
                             obj: obj.instance,
                             struct: o({ name: s('rob') }, ['getName']),
+                        },
+                    },
+                ];
+            },
+            'array - simple': () => {
+                const obj = [1, 'a', false];
+                return [
+                    obj,
+                    ref(1),
+                    {
+                        1: {
+                            obj,
+                            struct: arr([s(1), s('a'), s(false)]),
+                        },
+                    },
+                ];
+            },
+            'array - simple with props': () => {
+                const obj: any = [1, 'fish'];
+                obj.fun = {
+                    yes: true,
+                };
+                return [
+                    obj,
+                    ref(1),
+                    {
+                        1: {
+                            obj,
+                            struct: arr([s(1), s('fish')], {
+                                fun: ref(2),
+                            }),
+                        },
+                        2: {
+                            obj: obj.fun,
+                            struct: o({
+                                yes: s(true),
+                            }),
+                        },
+                    },
+                ];
+            },
+            'array - complex': () => {
+                class A {
+                    constructor(public name: string) {}
+                    getName() {}
+                }
+                const obj: any = [new A('first'), 'hi', new A('third'), A];
+                obj.prop = new A('yes');
+                return [
+                    obj,
+                    ref(1),
+                    {
+                        1: {
+                            obj,
+                            struct: arr([ref(2), s('hi'), ref(3), ref(4)], {
+                                prop: ref(5),
+                            }),
+                        },
+                        2: {
+                            obj: obj[0],
+                            struct: o(
+                                {
+                                    name: s('first'),
+                                },
+                                ['getName']
+                            ),
+                        },
+                        3: {
+                            obj: obj[2],
+                            struct: o(
+                                {
+                                    name: s('third'),
+                                },
+                                ['getName']
+                            ),
+                        },
+                        4: {
+                            obj: A,
+                            struct: f({}, ['getName']),
+                        },
+                        5: {
+                            obj: obj.prop,
+                            struct: o(
+                                {
+                                    name: s('yes'),
+                                },
+                                ['getName']
+                            ),
                         },
                     },
                 ];

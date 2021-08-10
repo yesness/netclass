@@ -51,7 +51,3 @@ export function handleSocket<TSend, TReceive>(
         socket.send(Buffer.from(`${JSON.stringify(json)}\n`, 'utf-8'));
     };
 }
-
-export function isInstance(object: any): boolean {
-    return object && object.constructor !== Object;
-}

@@ -124,7 +124,12 @@ class NCClient<T> implements INCClient<T> {
         upsert: UpsertState,
         objectID: number
     ): any {
-        const proxy: any = {};
+        let proxy: any = {};
+        if (structure.array !== null) {
+            proxy = structure.array.map((value) =>
+                this.getProxy(value, upsert)
+            );
+        }
         this.addStructure(proxy, structure.map, upsert);
         this.addFuncs(proxy, structure.funcs, objectID);
         return proxy;

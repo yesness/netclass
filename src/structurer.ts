@@ -1,5 +1,4 @@
 import Tracker from './tracker';
-import { isInstance } from './util';
 
 type Simple = {
     type: 'simple';
@@ -24,6 +23,7 @@ export type ObjectStructure = {
     type: 'object';
     map: ObjectMap;
     funcs: string[];
+    array: StructureValue[] | null;
 };
 
 export type ComplexStructure = FunctionStructure | ObjectStructure;
@@ -44,6 +44,7 @@ class StructurerClass {
     functionStop: any;
     defaultFunctionProps: string[];
     defaultInstanceProps: string[];
+    defaultArrayProps: string[];
 
     constructor() {
         function EmptyFunc() {}
@@ -54,6 +55,8 @@ class StructurerClass {
         this.defaultFunctionProps = this.getAllProps(EmptyFunc, 'function');
         this.defaultInstanceProps = [];
         this.defaultInstanceProps = this.getAllProps(new B(), 'instance');
+        this.defaultArrayProps = [];
+        this.defaultArrayProps = this.getAllProps([], 'array');
     }
 
     getValue(object: any, tracker: Tracker): GetValueReturn {
@@ -96,25 +99,37 @@ class StructurerClass {
     getComplexStructure(state: State): ComplexStructure {
         const { object } = state;
 
-        // Handle objects
+        // Handle objects and arrays
         if (typeof object === 'object') {
-            const objectIsInstance = isInstance(object);
-            const funcs = this.getAllProps(
-                Object.getPrototypeOf(object),
-                'instance'
-            );
-            const map = this.getObjectMap(
-                state,
-                objectIsInstance ? 'instance' : 'object',
-                funcs
-            );
-            for (let func of funcs) {
-                delete map[func];
+            let objectIsInstance = false;
+            let funcs: string[] = [];
+            let array = null;
+            let type: 'object' | 'instance' | 'array';
+            if (Array.isArray(object)) {
+                array = object.map((element) =>
+                    this.getValueInternal({
+                        ...state,
+                        object: element,
+                    })
+                );
+                type = 'array';
+            } else {
+                objectIsInstance = StructurerClass.isInstance(object);
+                type = 'object';
+                if (objectIsInstance) {
+                    funcs = this.getAllProps(
+                        Object.getPrototypeOf(object),
+                        'instance'
+                    );
+                    type = 'instance';
+                }
             }
+            const map = this.getObjectMap(state, type, funcs);
             return {
                 type: 'object',
                 map,
                 funcs,
+                array,
             };
         }
 
@@ -134,7 +149,7 @@ class StructurerClass {
 
     private getObjectMap(
         state: State,
-        type: 'function' | 'instance' | 'object',
+        type: 'function' | 'instance' | 'object' | 'array',
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
@@ -151,7 +166,7 @@ class StructurerClass {
 
     getAllProps(
         toCheck: any,
-        type: 'function' | 'instance' | 'object'
+        type: 'function' | 'instance' | 'object' | 'array'
     ): string[] {
         const props: string[] = [];
         let obj = toCheck;
@@ -170,12 +185,19 @@ class StructurerClass {
                 (type === 'function' &&
                     this.defaultFunctionProps.includes(prop)) ||
                 (type === 'instance' &&
-                    this.defaultInstanceProps.includes(prop))
+                    this.defaultInstanceProps.includes(prop)) ||
+                (type === 'array' &&
+                    (this.defaultArrayProps.includes(prop) ||
+                        !isNaN(parseInt(prop))))
             ) {
                 return false;
             }
             return prop != arr[idx + 1];
         });
+    }
+
+    private static isInstance(object: any): boolean {
+        return object && object.constructor !== Object;
     }
 }
 

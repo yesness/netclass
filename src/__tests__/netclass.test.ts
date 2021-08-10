@@ -238,6 +238,44 @@ describe('NetClass - general', () => {
         expect(y.name).toBe('hello');
         expect(x === y).toBeTruthy();
     });
+
+    test('array example', async () => {
+        class Person {
+            constructor(public name: string) {}
+        }
+        class People {
+            static async init() {
+                return new People();
+            }
+
+            private people: Person[] = [];
+
+            async addPerson(name: string): Promise<Person> {
+                const person = new Person(name);
+                this.people.push(person);
+                return person;
+            }
+
+            async getPeople(): Promise<Person[]> {
+                return this.people.slice();
+            }
+        }
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof People>({
+            object: People,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof People>(s2);
+        const ClientPeople = client.getObject();
+        const ppl = await ClientPeople.init();
+        const alice = await ppl.addPerson('alice');
+        const bob = await ppl.addPerson('bob');
+        const arr = await ppl.getPeople();
+        expect(alice.name).toBe('alice');
+        expect(bob.name).toBe('bob');
+        expect(arr[0]).toBe(alice);
+        expect(arr[1]).toBe(bob);
+    });
 });
 
 async function createInstanceTest(delay: number = 1) {
