@@ -1,8 +1,2 @@
 Figure out if __defineGetter__, __lookupSetter__, etc, work correctly
-Handle promise when creating instance
-Client same object equality
-Delete instance ID on server side after timeout after sending instance packet to client
-Throw error if read property from instance before receiving packet from server
 Sync properties on update
-Inject _id prop on all tracked objects so we don't have to iterate over all tracked objects to find a match
-Tracked objects as arguments

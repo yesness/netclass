@@ -146,7 +146,19 @@ class NCClient<T> implements INCClient<T> {
         const packet = await this.client.send({
             type: 'call_func',
             functionRef,
-            args,
+            args: args.map((arg) => {
+                if (typeof arg === 'object' && this.idProperty in arg) {
+                    return {
+                        type: 'reference',
+                        objectID: arg[this.idProperty],
+                    };
+                } else {
+                    return {
+                        type: 'raw',
+                        arg,
+                    };
+                }
+            }),
         });
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');

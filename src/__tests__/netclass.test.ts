@@ -358,4 +358,32 @@ describe('NetClass - general', () => {
             },
         });
     });
+
+    test('tracked object as argument', async () => {
+        class Person {
+            static async init(name: string) {
+                return new Person(name);
+            }
+            constructor(public name: string) {}
+        }
+        class A {
+            static person: Person | null = null;
+
+            static async setPerson(person: Person) {
+                A.person = person;
+            }
+
+            static async getPerson(): Promise<Person | null> {
+                return A.person;
+            }
+        }
+        const {
+            clientObject: { A: ClientA, Person: ClientPerson },
+        } = await initTest({ A, Person });
+        expect(await ClientA.getPerson()).toBeNull();
+        const alice = await ClientPerson.init('alice');
+        expect(alice.name).toBe('alice');
+        await ClientA.setPerson(alice);
+        expect(await ClientA.getPerson()).toBe(alice);
+    });
 });

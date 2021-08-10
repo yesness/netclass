@@ -17,10 +17,20 @@ export type MessageInit = {
     type: 'init';
 };
 
+export type CallFuncArg =
+    | {
+          type: 'raw';
+          arg: any;
+      }
+    | {
+          type: 'reference';
+          objectID: number;
+      };
+
 export type MessageCallFunc = {
     type: 'call_func';
     functionRef: FunctionRef;
-    args: any[];
+    args: CallFuncArg[];
 };
 
 export type PartialMessage = MessageInit | MessageCallFunc;

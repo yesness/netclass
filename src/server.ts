@@ -85,7 +85,15 @@ class Client<T> {
 
     private async callFunc(msg: MessageCallFunc): Promise<PartialPacket> {
         const func = this.getFunction(msg.functionRef);
-        const maybeResult = func(...msg.args);
+        const args = msg.args.map((arg) => {
+            if (arg.type === 'raw') {
+                return arg.arg;
+            } else {
+                return this.server.tracker.getTrackedObject(arg.objectID)
+                    .object;
+            }
+        });
+        const maybeResult = func(...args);
         let result;
         if (maybeResult instanceof Promise) {
             result = await maybeResult;
