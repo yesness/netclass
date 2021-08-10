@@ -29,11 +29,11 @@ class NCClient<T> implements INCClient<T> {
         { structure, idProperty }: PacketInit
     ) {
         this.objects = {};
+        this.idProperty = idProperty;
         this.proxy = this.getProxy(structure.value, {
             map: structure.newObjects,
             completedIDs: [],
         });
-        this.idProperty = idProperty;
     }
 
     private getProxy(value: StructureValue, upsert: UpsertState): any {
@@ -60,14 +60,19 @@ class NCClient<T> implements INCClient<T> {
         upsert: UpsertState,
         objectID: number
     ): any {
+        let obj;
         switch (structure.type) {
             case 'function':
-                return this.buildFunctionProxy(structure, upsert, {
+                obj = this.buildFunctionProxy(structure, upsert, {
                     funcObjectID: objectID,
                 });
+                break;
             case 'object':
-                return this.buildObjectProxy(structure, upsert, objectID);
+                obj = this.buildObjectProxy(structure, upsert, objectID);
+                break;
         }
+        obj[this.idProperty] = objectID;
+        return obj;
     }
 
     private buildFunctionProxy(

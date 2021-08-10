@@ -22,7 +22,7 @@ class Client<T> {
         socket: INCSocket
     ) {
         this.idMap = {};
-        this.send = handleSocket(socket, {
+        const send = handleSocket(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
             onClose: () => {
                 this.server.tracker.dereferenceAllObjects({
@@ -30,6 +30,12 @@ class Client<T> {
                 });
             },
         });
+        this.send = (packet: Packet) => {
+            if (this.server.debugLogging) {
+                console.debug('[SERVER] send', JSON.stringify(packet, null, 2));
+            }
+            send(packet);
+        };
         this.syncedObjectIDs = [];
     }
 

@@ -1,5 +1,5 @@
 import NetClass from '..';
-import { INCServer, INCSocket } from '../types';
+import { INCClient, INCServer, INCSocket } from '../types';
 
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
@@ -35,6 +35,35 @@ function getSockets(delay: number = 1): [INCSocket, INCSocket] {
         },
     };
     return [s1, s2];
+}
+
+async function initTest<T>(
+    object: T,
+    debugLogging?: boolean
+): Promise<{
+    s1: INCSocket;
+    s2: INCSocket;
+    server: INCServer;
+    client: INCClient<T>;
+    serverObject: T;
+    clientObject: T;
+}> {
+    const [s1, s2] = getSockets();
+    const server = NetClass.createServer<T>({
+        object,
+        debugLogging,
+    });
+    server.connect(s1);
+    const client = await NetClass.createClient<T>(s2);
+    const clientObject = client.getObject();
+    return {
+        s1,
+        s2,
+        server,
+        client,
+        serverObject: object,
+        clientObject,
+    };
 }
 
 function getNumTrackedObjects(server: INCServer): number {
@@ -311,5 +340,22 @@ describe('NetClass - general', () => {
         const a = await ClientA.init('alice');
         expect(a.name).toBe('alice');
         expect(a.getName()).resolves.toBe('alice');
+    });
+
+    test('netclass id property', async () => {
+        const { clientObject } = await initTest({
+            a: 1,
+            b: {
+                c: 'hello',
+            },
+        });
+        expect(clientObject).toEqual({
+            _netclass_id: 1,
+            a: 1,
+            b: {
+                _netclass_id: 2,
+                c: 'hello',
+            },
+        });
     });
 });
