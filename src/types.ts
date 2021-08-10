@@ -21,5 +21,4 @@ export interface INCServer {
 
 export interface INCClient<T> {
     getObject(): T;
-    resolveAll(): Promise<void>;
 }

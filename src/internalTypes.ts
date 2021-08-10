@@ -23,17 +23,7 @@ export type MessageCallFunc = {
     args: any[];
 };
 
-export type MessageCreateInstance = {
-    type: 'create_instance';
-    instanceID: number;
-    functionRef: FunctionRef;
-    args: any[];
-};
-
-export type PartialMessage =
-    | MessageGetStructure
-    | MessageCallFunc
-    | MessageCreateInstance;
+export type PartialMessage = MessageGetStructure | MessageCallFunc;
 
 export type Message = PartialMessage & MsgID;
 
@@ -45,10 +35,7 @@ export type ValueAndObjects = {
 };
 
 export type PacketStructure = ValueAndObjects & {
-    type:
-        | 'get_structure_result'
-        | 'call_func_result'
-        | 'create_instance_result';
+    type: 'get_structure_result' | 'call_func_result';
 };
 
 export type PacketError = {

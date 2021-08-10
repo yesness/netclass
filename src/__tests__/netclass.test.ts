@@ -43,6 +43,10 @@ function getNumTrackedObjects(server: INCServer): number {
     return Object.keys(objects).length;
 }
 
+function sleep(time: number) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+}
+
 describe('NetClass - general', () => {
     test('object with functions', async () => {
         type Obj = {
@@ -118,6 +122,9 @@ describe('NetClass - general', () => {
 
     test('class with instance functions', async () => {
         class Person {
+            static async create(name: string) {
+                return new Person(name);
+            }
             private name: string;
             constructor(name: string) {
                 this.name = name;
@@ -136,8 +143,8 @@ describe('NetClass - general', () => {
         server.connect(s1);
         const client = await NetClass.createClient<typeof Person>(s2);
         const ClientPerson = client.getObject();
-        const p1 = new ClientPerson('alice');
-        const p2 = new ClientPerson('bob');
+        const p1 = await ClientPerson.create('alice');
+        const p2 = await ClientPerson.create('bob');
         expect(p1.getName()).resolves.toBe('alice');
         expect(p2.getName()).resolves.toBe('bob');
         expect(p2.setName('carol')).resolves.toBeUndefined();
@@ -146,7 +153,11 @@ describe('NetClass - general', () => {
     });
 
     test('garbage collection', async () => {
-        class A {}
+        class A {
+            static async create() {
+                return new A();
+            }
+        }
         const [s1, s2] = getSockets();
         const server = NetClass.createServer<typeof A>({
             object: A,
@@ -154,12 +165,11 @@ describe('NetClass - general', () => {
         server.connect(s1);
         const client = await NetClass.createClient<typeof A>(s2);
         const ClientA = client.getObject();
-        expect(getNumTrackedObjects(server)).toBe(1);
-        new ClientA();
-        await client.resolveAll();
         expect(getNumTrackedObjects(server)).toBe(2);
+        await ClientA.create();
+        expect(getNumTrackedObjects(server)).toBe(3);
         s1.close();
-        expect(getNumTrackedObjects(server)).toBe(1);
+        expect(getNumTrackedObjects(server)).toBe(2);
     });
 
     test('instance as return type', async () => {
@@ -176,6 +186,9 @@ describe('NetClass - general', () => {
             }
         }
         class People {
+            static async create() {
+                return new People();
+            }
             private person: Person | null = null;
             async set(name: string) {
                 this.person = new Person(name);
@@ -193,23 +206,22 @@ describe('NetClass - general', () => {
         server.connect(s1);
         const client = await NetClass.createClient<typeof People>(s2);
         const ClientPeople = client.getObject();
-        assertNumTracked(1);
-        const ppl = new ClientPeople();
-        await client.resolveAll();
         assertNumTracked(2);
+        const ppl = await ClientPeople.create();
+        assertNumTracked(3);
         expect(ppl.get()).resolves.toBeNull();
         expect(ppl.set('bob')).resolves.toBeUndefined();
-        assertNumTracked(2);
-        const bob = await ppl.get();
         assertNumTracked(3);
+        const bob = await ppl.get();
+        assertNumTracked(4);
         expect(bob).not.toBeNull();
         if (bob === null) throw new Error('not possible');
         expect(bob.getName()).resolves.toBe('bob');
         expect(bob.setName('alice')).resolves.toBeUndefined();
         expect(bob.getName()).resolves.toBe('alice');
-        assertNumTracked(3);
+        assertNumTracked(4);
         const alice = await ppl.get();
-        assertNumTracked(3);
+        assertNumTracked(4);
         expect(alice).not.toBeNull();
         if (alice === null) throw new Error('not possible');
         expect(alice.getName()).resolves.toBe('alice');
@@ -276,58 +288,26 @@ describe('NetClass - general', () => {
         expect(arr[0]).toBe(alice);
         expect(arr[1]).toBe(bob);
     });
-});
 
-async function createInstanceTest(delay: number = 1) {
-    class A {
-        constructor(public name: string) {}
-        async getName(): Promise<string> {
-            return this.name;
-        }
-    }
-    const [s1, s2] = getSockets(delay);
-    const server = NetClass.createServer<typeof A>({
-        object: A,
-    });
-    server.connect(s1);
-    const client = await NetClass.createClient<typeof A>(s2);
-    const ClientA = client.getObject();
-    return { ClientA, client };
-}
-
-function sleep(time: number) {
-    return new Promise((resolve) => setTimeout(resolve, time));
-}
-
-describe('NetClass - properties', () => {
     test('instance properties on create - resolveAll', async () => {
-        const { ClientA, client } = await createInstanceTest();
-        const a = new ClientA('alice');
-        expect(a.name).toBeUndefined();
-        await client.resolveAll();
+        class A {
+            static async init(name: string) {
+                return new A(name);
+            }
+            constructor(public name: string) {}
+            async getName(): Promise<string> {
+                return this.name;
+            }
+        }
+        const [s1, s2] = getSockets();
+        const server = NetClass.createServer<typeof A>({
+            object: A,
+        });
+        server.connect(s1);
+        const client = await NetClass.createClient<typeof A>(s2);
+        const ClientA = client.getObject();
+        const a = await ClientA.init('alice');
         expect(a.name).toBe('alice');
         expect(a.getName()).resolves.toBe('alice');
-    });
-
-    test('instance properties on create - time', async () => {
-        const { ClientA, client } = await createInstanceTest(25);
-        const a = new ClientA('alice');
-        // t = 0, properties not set yet
-        expect(a.name).toBeUndefined();
-        await sleep(25);
-        // t = 25, server just received create msg, properties not set yet
-        expect(a.name).toBeUndefined();
-        await sleep(50);
-        // t = 75, we received instance message
-        expect(a.name).toBe('alice');
-    });
-
-    test('instance properties on create - async function', async () => {
-        const { ClientA, client } = await createInstanceTest(25);
-        const a = new ClientA('alice');
-        expect(a.name).toBeUndefined();
-        const name = await a.getName();
-        expect(a.name).toBe('alice');
-        expect(name).toBe('alice');
     });
 });

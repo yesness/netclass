@@ -1,6 +1,5 @@
 import {
     FunctionRef,
-    MessageCreateInstance,
     ObjectStructureMap,
     PacketStructure,
     ValueAndObjects,
@@ -21,19 +20,10 @@ type UpsertState = {
 };
 
 class NCClient<T> implements INCClient<T> {
-    private nextID: number;
     private objects: Record<number, any>;
     private proxy: T;
-    private pendingObjects: Record<
-        number,
-        {
-            object: any;
-            promise: Promise<void>;
-        }
-    > = {};
 
     constructor(private client: BaseClient, structure: PacketStructure) {
-        this.nextID = 1;
         this.objects = {};
         this.proxy = this.getProxy(structure.value, {
             map: structure.newObjects,
@@ -83,35 +73,10 @@ class NCClient<T> implements INCClient<T> {
         const _this = this;
         function ProxyFunc(...args: any[]) {
             if (new.target != null) {
-                const instanceID = _this.nextID++;
-                const tmpInstance = _this.addFuncs(
-                    {},
-                    structure.instanceFuncs,
-                    instanceID
+                throw new Error(
+                    'Instance creation with "new" is not supported. Instead' +
+                        ' call a static async function that creates and returns an instance.'
                 );
-                const createInstance = async () => {
-                    const result = await _this.createInstance({
-                        instanceID,
-                        functionRef,
-                        args,
-                    });
-                    const { value } = result;
-                    if (value.type !== 'reference') {
-                        throw new Error('Must be reference value');
-                    }
-                    const newObject = _this.convertValueAndObjects(result);
-                    // Merge newObject into temporary object
-                    for (let [key, val] of Object.entries(newObject)) {
-                        tmpInstance[key] = val;
-                    }
-                    _this.objects[value.objectID] = tmpInstance;
-                    delete _this.pendingObjects[instanceID];
-                };
-                _this.pendingObjects[instanceID] = {
-                    object: tmpInstance,
-                    promise: createInstance(),
-                };
-                return tmpInstance;
             } else {
                 return _this.callFunc(functionRef, args);
             }
@@ -164,24 +129,6 @@ class NCClient<T> implements INCClient<T> {
         return this.proxy;
     }
 
-    async resolveAll(): Promise<void> {
-        const instanceIDs = Object.keys(this.pendingObjects).map((id) =>
-            parseInt(id)
-        );
-        const proms = instanceIDs.map(
-            (instanceID) => this.pendingObjects[instanceID].promise
-        );
-        await Promise.all(proms);
-        const failedIDs = instanceIDs.filter((id) => id in this.pendingObjects);
-        if (failedIDs.length > 0) {
-            throw new Error(
-                `Failed to resolve pending objects with IDs: ${JSON.stringify(
-                    failedIDs
-                )}`
-            );
-        }
-    }
-
     private async callFunc(
         functionRef: FunctionRef,
         args: any[]
@@ -195,19 +142,6 @@ class NCClient<T> implements INCClient<T> {
             throw new Error('Invalid response packet');
         }
         return this.convertValueAndObjects(packet);
-    }
-
-    private async createInstance(
-        args: Pick<MessageCreateInstance, 'instanceID' | 'functionRef' | 'args'>
-    ): Promise<ValueAndObjects> {
-        const packet = await this.client.send({
-            type: 'create_instance',
-            ...args,
-        });
-        if (packet.type !== 'create_instance_result') {
-            throw new Error('Invalid response packet');
-        }
-        return packet;
     }
 
     private convertValueAndObjects({

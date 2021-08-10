@@ -2,7 +2,6 @@ import {
     FunctionRef,
     Message,
     MessageCallFunc,
-    MessageCreateInstance,
     ObjectStructureMap,
     Packet,
     PartialPacket,
@@ -72,8 +71,6 @@ class Client<T> {
                 };
             case 'call_func':
                 return await this.callFunc(msg);
-            case 'create_instance':
-                return await this.createInstance(msg);
         }
     }
 
@@ -93,27 +90,6 @@ class Client<T> {
         this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
         return {
             type: 'call_func_result',
-            value,
-            newObjects: this.getObjectStructuresAndSync(objectIDs),
-        };
-    }
-
-    private async createInstance(
-        msg: MessageCreateInstance
-    ): Promise<PartialPacket> {
-        const clazz = this.getFunction(msg.functionRef);
-        const instance = new clazz(...msg.args);
-        const { value, objectIDs } = Structurer.getValue(
-            instance,
-            this.server.tracker
-        );
-        if (value.type !== 'reference') {
-            throw new Error('Must get reference');
-        }
-        this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
-        this.idMap[msg.instanceID] = value.objectID;
-        return {
-            type: 'create_instance_result',
             value,
             newObjects: this.getObjectStructuresAndSync(objectIDs),
         };
