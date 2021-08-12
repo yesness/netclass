@@ -170,4 +170,8 @@ export default class NCServer<T> implements INCServer {
     connect(socket: INCSocket): void {
         new Client(this.nextClientID++, this, socket);
     }
+
+    sync<T extends object>(object: T): T {
+        return new Proxy(object, {});
+    }
 }

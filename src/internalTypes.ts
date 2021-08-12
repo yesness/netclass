@@ -1,4 +1,4 @@
-import { ComplexStructure, StructureValue } from './structurer';
+import { ComplexStructure, ObjectMap, StructureValue } from './structurer';
 
 type MsgID = {
     msgID: string;
@@ -53,6 +53,16 @@ export type PacketInit = {
 export type PacketCallFuncResult = {
     type: 'call_func_result';
     result: ValueAndObjects;
+};
+
+export type PacketUpdates = {
+    type: 'update';
+    objects: Record<
+        number,
+        {
+            updates: ObjectMap;
+        }
+    >;
 };
 
 export type PacketError = {
