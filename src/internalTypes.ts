@@ -1,4 +1,4 @@
-import { ComplexStructure, ObjectMap, StructureValue } from './structurer';
+import { ObjectMap, ValueAndObjects } from './structureTypes';
 
 type MsgID = {
     msgID: string;
@@ -36,13 +36,6 @@ export type MessageCallFunc = {
 export type PartialMessage = MessageInit | MessageCallFunc;
 
 export type Message = PartialMessage & MsgID;
-
-export type ObjectStructureMap = Record<number, ComplexStructure>;
-
-export type ValueAndObjects = {
-    value: StructureValue;
-    newObjects: ObjectStructureMap;
-};
 
 export type PacketInit = {
     type: 'init';

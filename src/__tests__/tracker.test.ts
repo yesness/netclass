@@ -1,8 +1,4 @@
-import Structurer, {
-    ComplexStructure,
-    ObjectMap,
-    StructureValue,
-} from '../structurer';
+import { ComplexStructure, ObjectMap, StructureValue } from '../structureTypes';
 import Tracker from '../tracker';
 
 function s(value: any): StructureValue {
@@ -41,7 +37,7 @@ function f(map: ObjectMap = {}): ComplexStructure {
     };
 }
 
-describe('Structurer', () => {
+describe('Tracker', () => {
     describe('getValue', () => {
         const AGen = () =>
             class A {
@@ -284,10 +280,7 @@ describe('Structurer', () => {
             test(name, () => {
                 const tracker = new Tracker('_netclass_id');
                 const anyTracker: any = tracker;
-                const { value, objectIDs } = Structurer.getValue(
-                    input,
-                    tracker
-                );
+                const { value, objectIDs } = tracker.getValue(input);
                 expect(value).toEqual(expected);
                 const numTrackedObjects = Object.keys(trackedObjects).length;
                 expect(anyTracker.nextID).toBe(numTrackedObjects + 1);

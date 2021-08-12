@@ -2,12 +2,11 @@ import {
     FunctionRef,
     Message,
     MessageCallFunc,
-    ObjectStructureMap,
     Packet,
     PartialPacket,
 } from './internalTypes';
-import Structurer, { GetValueReturn } from './structurer';
-import Tracker from './tracker';
+import { ObjectStructureMap } from './structureTypes';
+import Tracker, { GetValueReturn } from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
 
@@ -104,10 +103,7 @@ class Client<T> {
         } else {
             result = maybeResult;
         }
-        const { value, objectIDs } = Structurer.getValue(
-            result,
-            this.server.tracker
-        );
+        const { value, objectIDs } = this.server.tracker.getValue(result);
         this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
         return {
             type: 'call_func_result',
@@ -164,7 +160,7 @@ export default class NCServer<T> implements INCServer {
         this.tracker = new Tracker(
             options.netclassPropertyName ?? '_netclass_info'
         );
-        this.structure = Structurer.getValue(options.object, this.tracker);
+        this.structure = this.tracker.getValue(options.object);
         this.tracker.referenceObjects(
             { type: 'persist' },
             this.structure.objectIDs

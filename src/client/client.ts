@@ -1,16 +1,13 @@
-import {
-    FunctionRef,
-    ObjectStructureMap,
-    PacketInit,
-    ValueAndObjects,
-} from '../internalTypes';
+import { FunctionRef, PacketInit } from '../internalTypes';
 import {
     ComplexStructure,
     FunctionStructure,
     ObjectMap,
     ObjectStructure,
+    ObjectStructureMap,
     StructureValue,
-} from '../structurer';
+    ValueAndObjects,
+} from '../structureTypes';
 import { INCClient, INCSocket, NCClientOptions } from '../types';
 import BaseClient from './base';
 

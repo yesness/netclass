@@ -1,4 +1,5 @@
-import Structurer, { ComplexStructure } from './structurer';
+import { ComplexStructure, ObjectMap, StructureValue } from './structureTypes';
+import { PropUtil } from './util';
 
 type TrackedObject = {
     object: any;
@@ -20,6 +21,16 @@ type Reference =
           type: 'persist';
       };
 
+type State = {
+    object: any;
+    objectIDs: number[];
+};
+
+export type GetValueReturn = {
+    value: StructureValue;
+    objectIDs: number[];
+};
+
 export default class Tracker {
     private objects: Record<number, TrackedObject> = {};
     private refs: Record<string, number[]> = {};
@@ -27,7 +38,47 @@ export default class Tracker {
 
     constructor(public infoProperty: string) {}
 
-    trackObject(object: any, objectIDs: number[]): number {
+    private static isInstance(object: any): boolean {
+        return object && object.constructor !== Object;
+    }
+
+    getValue(object: any): GetValueReturn {
+        const objectIDs: number[] = [];
+        const value = this.getValueInternal({
+            object,
+            objectIDs,
+        });
+        return { value, objectIDs };
+    }
+
+    private getValueInternal(state: State): StructureValue {
+        const { object, objectIDs } = state;
+
+        // Handle simple values
+        if (
+            ['string', 'number', 'boolean', 'undefined'].includes(
+                typeof object
+            ) ||
+            object === null
+        ) {
+            return {
+                type: 'simple',
+                value: object,
+            };
+        }
+
+        // Handle objects and functions
+        else if (['object', 'function'].includes(typeof object)) {
+            return {
+                type: 'reference',
+                objectID: this.trackObject(object, objectIDs),
+            };
+        }
+
+        throw new Error(`Unsupported data type: ${typeof object}`);
+    }
+
+    private trackObject(object: any, objectIDs: number[]): number {
         if (this.infoProperty in object) {
             const { objectID }: NetClassInfo = object[this.infoProperty];
             this.addAllObjectDependencies(objectID, objectIDs);
@@ -43,9 +94,8 @@ export default class Tracker {
         });
         this.objects[objectID] = {
             object,
-            structure: Structurer.getComplexStructure({
+            structure: this.getComplexStructure({
                 object,
-                tracker: this,
                 objectIDs,
             }),
             refIDs: [],
@@ -63,6 +113,78 @@ export default class Tracker {
                 this.addAllObjectDependencies(value.objectID, objectIDs);
             }
         }
+    }
+
+    private getComplexStructure(state: State): ComplexStructure {
+        const { object } = state;
+
+        // Handle objects and arrays
+        if (typeof object === 'object') {
+            let objectIsInstance = false;
+            let funcs: string[] = [];
+            let array = null;
+            let type: 'object' | 'instance' | 'array';
+            if (Array.isArray(object)) {
+                array = object.map((element) =>
+                    this.getValueInternal({
+                        ...state,
+                        object: element,
+                    })
+                );
+                type = 'array';
+            } else {
+                objectIsInstance = Tracker.isInstance(object);
+                type = 'object';
+                if (objectIsInstance) {
+                    funcs = PropUtil.getAllProps(
+                        Object.getPrototypeOf(object),
+                        'instance',
+                        this.infoProperty
+                    );
+                    type = 'instance';
+                }
+            }
+            const map = this.getObjectMap(state, type, funcs);
+            return {
+                type: 'object',
+                map,
+                funcs,
+                array,
+            };
+        }
+
+        // Handle classes and functions
+        else if (typeof object === 'function') {
+            return {
+                type: 'function',
+                map: this.getObjectMap(state, 'function'),
+            };
+        }
+
+        throw new Error(
+            `Object must have type object or function but got ${typeof object}`
+        );
+    }
+
+    private getObjectMap(
+        state: State,
+        type: 'function' | 'instance' | 'object' | 'array',
+        excludeFuncs: string[] = []
+    ): ObjectMap {
+        const map: ObjectMap = {};
+        const props = PropUtil.getAllProps(
+            state.object,
+            type,
+            this.infoProperty
+        );
+        for (let prop of props) {
+            if (excludeFuncs.includes(prop)) continue;
+            map[prop] = this.getValueInternal({
+                ...state,
+                object: state.object[prop],
+            });
+        }
+        return map;
     }
 
     referenceObjects(ref: Reference, objIDs: number[]) {
