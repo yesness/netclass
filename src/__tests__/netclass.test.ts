@@ -350,8 +350,8 @@ describe('NetClass - general', () => {
             },
         });
         const obj: any = clientObject;
-        expect(obj._netclass_id).toBe(1);
-        expect(obj.b._netclass_id).toBe(2);
+        expect(obj._netclass_info).toBe(1);
+        expect(obj.b._netclass_info).toBe(2);
         expect(clientObject).toEqual({
             a: 1,
             b: {

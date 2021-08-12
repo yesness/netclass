@@ -1,6 +1,6 @@
 export type NCServerOptions<T> = {
     object: T;
-    objectIDPropertyName?: string; // default: "_netclass_id"
+    netclassPropertyName?: string; // default: "_netclass_info"
     debugLogging?: boolean;
 };
 

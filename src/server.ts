@@ -11,6 +11,10 @@ import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
 
+type SyncOptions = {
+    recursive?: boolean; // default: true
+};
+
 class Client<T> {
     private idMap: Record<number, number>;
     private send: SocketSend<Packet>;
@@ -76,7 +80,7 @@ class Client<T> {
                             this.server.structure.objectIDs
                         ),
                     },
-                    idProperty: this.server.tracker.idProperty,
+                    idProperty: this.server.tracker.infoProperty,
                 };
             case 'call_func':
                 return await this.callFunc(msg);
@@ -158,7 +162,7 @@ export default class NCServer<T> implements INCServer {
     constructor(options: NCServerOptions<T>) {
         this.debugLogging = options.debugLogging ?? false;
         this.tracker = new Tracker(
-            options.objectIDPropertyName ?? '_netclass_id'
+            options.netclassPropertyName ?? '_netclass_info'
         );
         this.structure = Structurer.getValue(options.object, this.tracker);
         this.tracker.referenceObjects(
@@ -171,7 +175,13 @@ export default class NCServer<T> implements INCServer {
         new Client(this.nextClientID++, this, socket);
     }
 
-    sync<T extends object>(object: T): T {
+    sync<T extends object>(object: T, options?: SyncOptions): T {
+        if (options?.recursive ?? true) {
+            const obj: any = object;
+            for (const [key, value] of Object.entries(object)) {
+                obj[key] = this.sync(value, options);
+            }
+        }
         return new Proxy(object, {});
     }
 }

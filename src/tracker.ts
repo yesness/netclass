@@ -4,6 +4,12 @@ type TrackedObject = {
     object: any;
     structure: ComplexStructure;
     refIDs: string[];
+    ncInfo: NetClassInfo;
+};
+
+type NetClassInfo = {
+    objectID: number;
+    isProxy: boolean;
 };
 
 type Reference =
@@ -19,19 +25,23 @@ export default class Tracker {
     private refs: Record<string, number[]> = {};
     private nextID: number = 1;
 
-    constructor(public idProperty: string) {}
+    constructor(public infoProperty: string) {}
 
     trackObject(object: any, objectIDs: number[]): number {
-        if (this.idProperty in object) {
-            const objID = object[this.idProperty];
-            this.addAllObjectDependencies(objID, objectIDs);
-            return objID;
+        if (this.infoProperty in object) {
+            const { objectID }: NetClassInfo = object[this.infoProperty];
+            this.addAllObjectDependencies(objectID, objectIDs);
+            return objectID;
         }
-        const objID = this.nextID++;
-        Object.defineProperty(object, this.idProperty, {
-            value: objID,
+        const objectID = this.nextID++;
+        const ncInfo: NetClassInfo = {
+            objectID,
+            isProxy: false,
+        };
+        Object.defineProperty(object, this.infoProperty, {
+            value: ncInfo,
         });
-        this.objects[objID] = {
+        this.objects[objectID] = {
             object,
             structure: Structurer.getComplexStructure({
                 object,
@@ -39,9 +49,10 @@ export default class Tracker {
                 objectIDs,
             }),
             refIDs: [],
+            ncInfo,
         };
-        objectIDs.push(objID);
-        return objID;
+        objectIDs.push(objectID);
+        return objectID;
     }
 
     private addAllObjectDependencies(objID: number, objectIDs: number[]) {

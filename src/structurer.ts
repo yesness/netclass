@@ -119,7 +119,7 @@ class StructurerClass {
                     funcs = this.getAllProps(
                         Object.getPrototypeOf(object),
                         'instance',
-                        state.tracker.idProperty
+                        state.tracker.infoProperty
                     );
                     type = 'instance';
                 }
@@ -155,7 +155,7 @@ class StructurerClass {
         const props = this.getAllProps(
             state.object,
             type,
-            state.tracker.idProperty
+            state.tracker.infoProperty
         );
         for (let prop of props) {
             if (excludeFuncs.includes(prop)) continue;
