@@ -1,4 +1,5 @@
 import Tracker from './tracker';
+import { PropUtil } from './util';
 
 type Simple = {
     type: 'simple';
@@ -39,25 +40,6 @@ type State = {
 };
 
 class StructurerClass {
-    objectStop: any;
-    functionStop: any;
-    defaultFunctionProps: string[];
-    defaultInstanceProps: string[];
-    defaultArrayProps: string[];
-
-    constructor() {
-        function EmptyFunc() {}
-        const B: any = EmptyFunc;
-        this.objectStop = Object.getPrototypeOf({});
-        this.functionStop = Object.getPrototypeOf(EmptyFunc);
-        this.defaultFunctionProps = [];
-        this.defaultFunctionProps = this.getAllProps(EmptyFunc, 'function');
-        this.defaultInstanceProps = [];
-        this.defaultInstanceProps = this.getAllProps(new B(), 'instance');
-        this.defaultArrayProps = [];
-        this.defaultArrayProps = this.getAllProps([], 'array');
-    }
-
     getValue(object: any, tracker: Tracker): GetValueReturn {
         const objectIDs: number[] = [];
         const value = this.getValueInternal({
@@ -116,7 +98,7 @@ class StructurerClass {
                 objectIsInstance = StructurerClass.isInstance(object);
                 type = 'object';
                 if (objectIsInstance) {
-                    funcs = this.getAllProps(
+                    funcs = PropUtil.getAllProps(
                         Object.getPrototypeOf(object),
                         'instance',
                         state.tracker.infoProperty
@@ -152,7 +134,7 @@ class StructurerClass {
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
-        const props = this.getAllProps(
+        const props = PropUtil.getAllProps(
             state.object,
             type,
             state.tracker.infoProperty
@@ -165,40 +147,6 @@ class StructurerClass {
             });
         }
         return map;
-    }
-
-    getAllProps(
-        toCheck: any,
-        type: 'function' | 'instance' | 'object' | 'array',
-        excludeProp?: string
-    ): string[] {
-        const props: string[] = [];
-        let obj = toCheck;
-        while (true) {
-            if (
-                !obj ||
-                obj === this.objectStop ||
-                (type === 'function' && obj === this.functionStop)
-            )
-                break;
-            props.push(...Object.getOwnPropertyNames(obj));
-            obj = Object.getPrototypeOf(obj);
-        }
-        return props.sort().filter((prop, idx, arr) => {
-            if (
-                (type === 'function' &&
-                    this.defaultFunctionProps.includes(prop)) ||
-                (type === 'instance' &&
-                    this.defaultInstanceProps.includes(prop)) ||
-                (type === 'array' &&
-                    (this.defaultArrayProps.includes(prop) ||
-                        !isNaN(parseInt(prop)))) ||
-                prop === excludeProp
-            ) {
-                return false;
-            }
-            return prop != arr[idx + 1];
-        });
     }
 
     private static isInstance(object: any): boolean {

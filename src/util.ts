@@ -51,3 +51,59 @@ export function handleSocket<TSend, TReceive>(
         socket.send(Buffer.from(`${JSON.stringify(json)}\n`, 'utf-8'));
     };
 }
+
+class PropUtilClass {
+    private objectStop: any;
+    private functionStop: any;
+    private defaultFunctionProps: string[];
+    private defaultInstanceProps: string[];
+    private defaultArrayProps: string[];
+
+    constructor() {
+        function EmptyFunc() {}
+        const B: any = EmptyFunc;
+        this.objectStop = Object.getPrototypeOf({});
+        this.functionStop = Object.getPrototypeOf(EmptyFunc);
+        this.defaultFunctionProps = [];
+        this.defaultFunctionProps = this.getAllProps(EmptyFunc, 'function');
+        this.defaultInstanceProps = [];
+        this.defaultInstanceProps = this.getAllProps(new B(), 'instance');
+        this.defaultArrayProps = [];
+        this.defaultArrayProps = this.getAllProps([], 'array');
+    }
+
+    getAllProps(
+        toCheck: any,
+        type: 'function' | 'instance' | 'object' | 'array',
+        excludeProp?: string
+    ): string[] {
+        const props: string[] = [];
+        let obj = toCheck;
+        while (true) {
+            if (
+                !obj ||
+                obj === this.objectStop ||
+                (type === 'function' && obj === this.functionStop)
+            )
+                break;
+            props.push(...Object.getOwnPropertyNames(obj));
+            obj = Object.getPrototypeOf(obj);
+        }
+        return props.sort().filter((prop, idx, arr) => {
+            if (
+                (type === 'function' &&
+                    this.defaultFunctionProps.includes(prop)) ||
+                (type === 'instance' &&
+                    this.defaultInstanceProps.includes(prop)) ||
+                (type === 'array' &&
+                    (this.defaultArrayProps.includes(prop) ||
+                        !isNaN(parseInt(prop)))) ||
+                prop === excludeProp
+            ) {
+                return false;
+            }
+            return prop != arr[idx + 1];
+        });
+    }
+}
+export const PropUtil = new PropUtilClass();
