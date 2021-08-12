@@ -1,3 +1,4 @@
+import DelayProxy from './delayProxy';
 import { ComplexStructure, ObjectMap, StructureValue } from './structureTypes';
 import { PropUtil } from './util';
 
@@ -5,12 +6,10 @@ type TrackedObject = {
     object: any;
     structure: ComplexStructure;
     refIDs: string[];
-    ncInfo: NetClassInfo;
 };
 
 type NetClassInfo = {
     objectID: number;
-    isProxy: boolean;
 };
 
 type Reference =
@@ -87,7 +86,6 @@ export default class Tracker {
         const objectID = this.nextID++;
         const ncInfo: NetClassInfo = {
             objectID,
-            isProxy: false,
         };
         Object.defineProperty(object, this.infoProperty, {
             value: ncInfo,
@@ -99,9 +97,19 @@ export default class Tracker {
                 objectIDs,
             }),
             refIDs: [],
-            ncInfo,
         };
         objectIDs.push(objectID);
+
+        // Handle DelayProxy
+        if (DelayProxy.isProxy(object)) {
+            const { setHandler } = DelayProxy.get(object);
+            setHandler({
+                set: (target, prop, value, receiver) => {
+                    return Reflect.set(target, prop, value, receiver);
+                },
+            });
+        }
+
         return objectID;
     }
 

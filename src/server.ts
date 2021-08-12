@@ -1,3 +1,4 @@
+import DelayProxy from './delayProxy';
 import {
     FunctionRef,
     Message,
@@ -171,13 +172,17 @@ export default class NCServer<T> implements INCServer {
         new Client(this.nextClientID++, this, socket);
     }
 
-    sync<T extends object>(object: T, options?: SyncOptions): T {
+    static sync<T extends object>(object: T, options?: SyncOptions): T {
         if (options?.recursive ?? true) {
             const obj: any = object;
             for (const [key, value] of Object.entries(object)) {
                 obj[key] = this.sync(value, options);
             }
         }
-        return new Proxy(object, {});
+        if (DelayProxy.isProxy(object)) {
+            return object;
+        } else {
+            return DelayProxy.create(object);
+        }
     }
 }
