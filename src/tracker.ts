@@ -28,7 +28,9 @@ export default class Tracker {
             return objID;
         }
         const objID = this.nextID++;
-        object[this.idProperty] = objID;
+        Object.defineProperty(object, this.idProperty, {
+            value: objID,
+        });
         this.objects[objID] = {
             object,
             structure: Structurer.getComplexStructure({

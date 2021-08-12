@@ -71,7 +71,7 @@ class NCClient<T> implements INCClient<T> {
                 obj = this.buildObjectProxy(structure, upsert, objectID);
                 break;
         }
-        obj[this.idProperty] = objectID;
+        Object.defineProperty(obj, this.idProperty, { value: objectID });
         return obj;
     }
 
