@@ -6,8 +6,8 @@ import {
     Packet,
     PartialPacket,
 } from './internalTypes';
-import { ObjectStructureMap } from './structureTypes';
-import Tracker, { GetValueReturn } from './tracker';
+import { ObjectStructureMap, StructureValue } from './structureTypes';
+import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
 
@@ -72,19 +72,23 @@ class Client<T> {
     private async messageHandler(msg: Message): Promise<PartialPacket> {
         switch (msg.type) {
             case 'init':
-                return {
-                    type: 'init',
-                    structure: {
-                        value: this.server.structure.value,
-                        newObjects: this.getObjectStructuresAndSync(
-                            this.server.structure.objectIDs
-                        ),
-                    },
-                    idProperty: this.server.tracker.infoProperty,
-                };
+                return await this.init();
             case 'call_func':
                 return await this.callFunc(msg);
         }
+    }
+
+    private async init(): Promise<PartialPacket> {
+        return {
+            type: 'init',
+            structure: {
+                value: this.server.structure,
+                newObjects: this.getObjectStructuresAndSync(
+                    this.server.structure
+                ),
+            },
+            idProperty: this.server.tracker.infoProperty,
+        };
     }
 
     private async callFunc(msg: MessageCallFunc): Promise<PartialPacket> {
@@ -104,26 +108,41 @@ class Client<T> {
         } else {
             result = maybeResult;
         }
-        const { value, objectIDs } = this.server.tracker.getValue(result);
-        this.server.tracker.referenceObjects({ clientID: this.id }, objectIDs);
+        const value = this.server.tracker.getValue(result);
+        if (value.type === 'reference') {
+            this.server.tracker.referenceObject(
+                { clientID: this.id },
+                value.objectID
+            );
+        }
         return {
             type: 'call_func_result',
             result: {
                 value,
-                newObjects: this.getObjectStructuresAndSync(objectIDs),
+                newObjects: this.getObjectStructuresAndSync(value),
             },
         };
     }
 
     private getObjectStructuresAndSync(
-        objectIDs: number[]
+        value: StructureValue
     ): ObjectStructureMap {
-        const map: ObjectStructureMap = {};
-        for (let objID of objectIDs) {
-            if (this.syncedObjectIDs.includes(objID)) continue;
-            this.syncedObjectIDs.push(objID);
-            map[objID] = this.server.tracker.getTrackedObject(objID).structure;
+        if (
+            value.type === 'simple' ||
+            this.syncedObjectIDs.includes(value.objectID)
+        ) {
+            return {};
         }
+        const map = this.server.tracker.getObjectStructureMap(value.objectID);
+        for (const strID of Object.keys(map)) {
+            const objID = parseInt(strID);
+            if (this.syncedObjectIDs.includes(objID)) {
+                delete map[objID];
+            } else {
+                this.syncedObjectIDs.push(objID);
+            }
+        }
+        this.syncedObjectIDs.push(value.objectID);
         return map;
     }
 
@@ -153,7 +172,7 @@ class Client<T> {
 export default class NCServer<T> implements INCServer {
     debugLogging: boolean;
     tracker: Tracker;
-    structure: GetValueReturn;
+    structure: StructureValue;
     private nextClientID: number = 1;
 
     constructor(options: NCServerOptions<T>) {
@@ -162,10 +181,12 @@ export default class NCServer<T> implements INCServer {
             options.netclassPropertyName ?? '_netclass_info'
         );
         this.structure = this.tracker.getValue(options.object);
-        this.tracker.referenceObjects(
-            { type: 'persist' },
-            this.structure.objectIDs
-        );
+        if (this.structure.type === 'reference') {
+            this.tracker.referenceObject(
+                { type: 'persist' },
+                this.structure.objectID
+            );
+        }
     }
 
     connect(socket: INCSocket): void {

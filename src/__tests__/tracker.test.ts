@@ -280,7 +280,7 @@ describe('Tracker', () => {
             test(name, () => {
                 const tracker = new Tracker('_netclass_id');
                 const anyTracker: any = tracker;
-                const { value, objectIDs } = tracker.getValue(input);
+                const value = tracker.getValue(input);
                 expect(value).toEqual(expected);
                 const numTrackedObjects = Object.keys(trackedObjects).length;
                 expect(anyTracker.nextID).toBe(numTrackedObjects + 1);
@@ -290,10 +290,6 @@ describe('Tracker', () => {
                     expect(trackedObject.object).toBe(expected.obj);
                     expect(trackedObject.structure).toEqual(expected.struct);
                 }
-                const expectedObjectIDs = new Array(numTrackedObjects)
-                    .fill(null)
-                    .map((_, idx) => idx + 1);
-                expect(objectIDs.sort()).toEqual(expectedObjectIDs);
             });
         });
     });

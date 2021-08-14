@@ -268,13 +268,7 @@ describe('NetClass - general', () => {
                 return B.a;
             }
         }
-        const [s1, s2] = getSockets();
-        const server = NetClass.createServer<typeof B>({
-            object: B,
-        });
-        server.connect(s1);
-        const client = await NetClass.createClient<typeof B>(s2);
-        const ClientB = client.getObject();
+        const { clientObject: ClientB } = await initTest(B);
         const x = await ClientB.get();
         expect(x.name).toBe('hello');
         const y = await ClientB.get();

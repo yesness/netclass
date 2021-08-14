@@ -1,5 +1,10 @@
 import DelayProxy from './delayProxy';
-import { ComplexStructure, ObjectMap, StructureValue } from './structureTypes';
+import {
+    ComplexStructure,
+    ObjectMap,
+    ObjectStructureMap,
+    StructureValue,
+} from './structureTypes';
 import { PropUtil } from './util';
 
 type TrackedObject = {
@@ -18,21 +23,14 @@ type Reference =
       }
     | {
           type: 'persist';
+      }
+    | {
+          objectID: number;
       };
-
-type State = {
-    object: any;
-    objectIDs: number[];
-};
-
-export type GetValueReturn = {
-    value: StructureValue;
-    objectIDs: number[];
-};
 
 export default class Tracker {
     private objects: Record<number, TrackedObject> = {};
-    private refs: Record<string, number[]> = {};
+    private refs: Record<string, number[]> = {}; // Maps reference to object IDs
     private nextID: number = 1;
 
     constructor(public infoProperty: string) {}
@@ -41,18 +39,7 @@ export default class Tracker {
         return object && object.constructor !== Object;
     }
 
-    getValue(object: any): GetValueReturn {
-        const objectIDs: number[] = [];
-        const value = this.getValueInternal({
-            object,
-            objectIDs,
-        });
-        return { value, objectIDs };
-    }
-
-    private getValueInternal(state: State): StructureValue {
-        const { object, objectIDs } = state;
-
+    getValue(object: any): StructureValue {
         // Handle simple values
         if (
             ['string', 'number', 'boolean', 'undefined'].includes(
@@ -70,17 +57,41 @@ export default class Tracker {
         else if (['object', 'function'].includes(typeof object)) {
             return {
                 type: 'reference',
-                objectID: this.trackObject(object, objectIDs),
+                objectID: this.trackObject(object),
             };
         }
 
         throw new Error(`Unsupported data type: ${typeof object}`);
     }
 
-    private trackObject(object: any, objectIDs: number[]): number {
+    getTrackedObject(objID: number): TrackedObject {
+        if (!(objID in this.objects)) {
+            throw new Error(`Invalid objID: ${objID}`);
+        }
+        return this.objects[objID];
+    }
+
+    getObjectStructureMap(objectID: number): ObjectStructureMap {
+        const map: ObjectStructureMap = {};
+        this.getObjectStructureMapInternal(objectID, map);
+        return map;
+    }
+
+    private getObjectStructureMapInternal(
+        objectID: number,
+        map: ObjectStructureMap
+    ): void {
+        map[objectID] = this.getTrackedObject(objectID).structure;
+        for (const objID of this.getReferencedObjectIDs(
+            this.getRefID({ objectID })
+        )) {
+            this.getObjectStructureMapInternal(objID, map);
+        }
+    }
+
+    private trackObject(object: any): number {
         if (this.infoProperty in object) {
             const { objectID }: NetClassInfo = object[this.infoProperty];
-            this.addAllObjectDependencies(objectID, objectIDs);
             return objectID;
         }
         const objectID = this.nextID++;
@@ -90,15 +101,16 @@ export default class Tracker {
         Object.defineProperty(object, this.infoProperty, {
             value: ncInfo,
         });
+        const structure = this.getComplexStructure(object);
         this.objects[objectID] = {
             object,
-            structure: this.getComplexStructure({
-                object,
-                objectIDs,
-            }),
+            structure,
             refIDs: [],
         };
-        objectIDs.push(objectID);
+        this.referenceObjects(
+            { objectID },
+            this.getObjectIDDependencies(structure)
+        );
 
         // Handle DelayProxy
         if (DelayProxy.isProxy(object)) {
@@ -113,19 +125,7 @@ export default class Tracker {
         return objectID;
     }
 
-    private addAllObjectDependencies(objID: number, objectIDs: number[]) {
-        objectIDs.push(objID);
-        const { structure } = this.objects[objID];
-        for (let value of Object.values(structure.map)) {
-            if (value.type !== 'simple') {
-                this.addAllObjectDependencies(value.objectID, objectIDs);
-            }
-        }
-    }
-
-    private getComplexStructure(state: State): ComplexStructure {
-        const { object } = state;
-
+    private getComplexStructure(object: any): ComplexStructure {
         // Handle objects and arrays
         if (typeof object === 'object') {
             let objectIsInstance = false;
@@ -133,12 +133,7 @@ export default class Tracker {
             let array = null;
             let type: 'object' | 'instance' | 'array';
             if (Array.isArray(object)) {
-                array = object.map((element) =>
-                    this.getValueInternal({
-                        ...state,
-                        object: element,
-                    })
-                );
+                array = object.map((element) => this.getValue(element));
                 type = 'array';
             } else {
                 objectIsInstance = Tracker.isInstance(object);
@@ -152,7 +147,7 @@ export default class Tracker {
                     type = 'instance';
                 }
             }
-            const map = this.getObjectMap(state, type, funcs);
+            const map = this.getObjectMap(object, type, funcs);
             return {
                 type: 'object',
                 map,
@@ -165,7 +160,7 @@ export default class Tracker {
         else if (typeof object === 'function') {
             return {
                 type: 'function',
-                map: this.getObjectMap(state, 'function'),
+                map: this.getObjectMap(object, 'function'),
             };
         }
 
@@ -175,24 +170,33 @@ export default class Tracker {
     }
 
     private getObjectMap(
-        state: State,
+        object: any,
         type: 'function' | 'instance' | 'object' | 'array',
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
-        const props = PropUtil.getAllProps(
-            state.object,
-            type,
-            this.infoProperty
-        );
+        const props = PropUtil.getAllProps(object, type, this.infoProperty);
         for (let prop of props) {
             if (excludeFuncs.includes(prop)) continue;
-            map[prop] = this.getValueInternal({
-                ...state,
-                object: state.object[prop],
-            });
+            map[prop] = this.getValue(object[prop]);
         }
         return map;
+    }
+
+    private getObjectIDDependencies(struct: ComplexStructure): number[] {
+        const objectIDs: number[] = [];
+        const addValues = (values: StructureValue[]) => {
+            for (let value of values) {
+                if (value.type !== 'simple') {
+                    objectIDs.push(value.objectID);
+                }
+            }
+        };
+        addValues(Object.values(struct.map));
+        if (struct.type === 'object') {
+            addValues(struct.array ?? []);
+        }
+        return objectIDs;
     }
 
     referenceObjects(ref: Reference, objIDs: number[]) {
@@ -204,7 +208,7 @@ export default class Tracker {
     referenceObject(ref: Reference, objID: number) {
         const refID = this.getRefID(ref);
         // Add to this.objects
-        const trackedObject = this.objects[objID];
+        const trackedObject = this.getTrackedObject(objID);
         if (!trackedObject.refIDs.includes(refID)) {
             trackedObject.refIDs.push(refID);
         }
@@ -228,18 +232,17 @@ export default class Tracker {
         this.dereferenceObjectInternal(this.getRefID(ref), objID);
     }
 
-    getTrackedObject(objID: number): TrackedObject {
-        if (!(objID in this.objects)) {
-            throw new Error(`Invalid objID: ${objID}`);
-        }
-        return this.objects[objID];
-    }
-
-    private dereferenceObjectInternal(refID: string, objID: number) {
-        const obj = this.objects[objID];
+    private dereferenceObjectInternal(refID: string, objectID: number) {
+        const obj = this.getTrackedObject(objectID);
         obj.refIDs.splice(obj.refIDs.indexOf(refID), 1);
         if (obj.refIDs.length === 0) {
-            delete this.objects[objID];
+            this.dereferenceAllObjects({ objectID });
+            delete this.objects[objectID];
+        }
+        const allReferences = this.getReferencedObjectIDs(refID);
+        allReferences.splice(allReferences.indexOf(objectID), 1);
+        if (allReferences.length === 0) {
+            delete this.refs[refID];
         }
     }
 
@@ -255,6 +258,8 @@ export default class Tracker {
                 case 'persist':
                     return 'persist';
             }
+        } else if ('objectID' in ref) {
+            return `object-${ref.objectID}`;
         }
         throw new Error(`Invalid reference: ${JSON.stringify(ref)}`);
     }
