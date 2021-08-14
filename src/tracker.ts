@@ -28,10 +28,16 @@ type Reference =
           objectID: number;
       };
 
+type ObjectUpdate = {
+    map: ObjectMap;
+    deleted: string[];
+};
+
 export default class Tracker {
     private objects: Record<number, TrackedObject> = {};
     private refs: Record<string, number[]> = {}; // Maps reference to object IDs
     private nextID: number = 1;
+    private updates: Record<number, ObjectUpdate> = {};
 
     constructor(public infoProperty: string) {}
 
@@ -117,6 +123,28 @@ export default class Tracker {
             const { setHandler } = DelayProxy.get(object);
             setHandler({
                 set: (target, prop, value, receiver) => {
+                    if (
+                        typeof value === 'object' &&
+                        !DelayProxy.isProxy(value)
+                    ) {
+                        value = DelayProxy.create(value);
+                    }
+                    // Dereference old object if last reference
+                    const oldValue = target[prop];
+                    if (typeof oldValue === 'object') {
+                        let multiReference = false;
+                        for (const [key, val] of Object.entries(target)) {
+                            if ((key !== prop && oldValue) === val) {
+                                multiReference = true;
+                            }
+                        }
+                        if (!multiReference) {
+                            this.dereferenceObject({ objectID });
+                        }
+                    }
+
+                    const valueID = this.trackObject(value);
+                    const update = this.getUpdate(objectID);
                     return Reflect.set(target, prop, value, receiver);
                 },
             });
@@ -262,5 +290,15 @@ export default class Tracker {
             return `object-${ref.objectID}`;
         }
         throw new Error(`Invalid reference: ${JSON.stringify(ref)}`);
+    }
+
+    private getUpdate(objectID: number): ObjectUpdate {
+        if (!(objectID in this.updates)) {
+            this.updates[objectID] = {
+                map: {},
+                deleted: [],
+            };
+        }
+        return this.updates[objectID];
     }
 }

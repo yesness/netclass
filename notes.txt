@@ -1,0 +1,5 @@
+3 scenarios for tracking object
+- server initialization
+- function return
+- updating property on synced object
+- function argument
