@@ -183,26 +183,6 @@ describe('NetClass - general', () => {
         expect(p1.getName()).resolves.toBe('alice');
     });
 
-    test('garbage collection', async () => {
-        class A {
-            static async create() {
-                return new A();
-            }
-        }
-        const [s1, s2] = getSockets();
-        const server = NetClass.createServer<typeof A>({
-            object: A,
-        });
-        server.connect(s1);
-        const client = await NetClass.createClient<typeof A>(s2);
-        const ClientA = client.getObject();
-        expect(getNumTrackedObjects(server)).toBe(2);
-        await ClientA.create();
-        expect(getNumTrackedObjects(server)).toBe(3);
-        s1.close();
-        expect(getNumTrackedObjects(server)).toBe(2);
-    });
-
     test('instance as return type', async () => {
         class Person {
             private name: string;

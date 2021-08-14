@@ -29,9 +29,10 @@ class Client<T> {
         const send = handleSocket(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
             onClose: () => {
-                this.server.tracker.dereferenceAllObjects({
-                    clientID: this.id,
-                });
+                this.server.clients.splice(
+                    this.server.clients.indexOf(this),
+                    1
+                );
             },
         });
         this.send = (packet: Packet) => {
@@ -109,12 +110,6 @@ class Client<T> {
             result = maybeResult;
         }
         const value = this.server.tracker.getValue(result);
-        if (value.type === 'reference') {
-            this.server.tracker.referenceObject(
-                { clientID: this.id },
-                value.objectID
-            );
-        }
         return {
             type: 'call_func_result',
             result: {
@@ -173,6 +168,7 @@ export default class NCServer<T> implements INCServer {
     debugLogging: boolean;
     tracker: Tracker;
     structure: StructureValue;
+    clients: Client<T>[] = [];
     private nextClientID: number = 1;
 
     constructor(options: NCServerOptions<T>) {
@@ -181,16 +177,11 @@ export default class NCServer<T> implements INCServer {
             options.netclassPropertyName ?? '_netclass_info'
         );
         this.structure = this.tracker.getValue(options.object);
-        if (this.structure.type === 'reference') {
-            this.tracker.referenceObject(
-                { type: 'persist' },
-                this.structure.objectID
-            );
-        }
     }
 
     connect(socket: INCSocket): void {
-        new Client(this.nextClientID++, this, socket);
+        const client = new Client(this.nextClientID++, this, socket);
+        this.clients.push(client);
     }
 
     static sync<T extends object>(object: T, options?: SyncOptions): T {

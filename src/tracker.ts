@@ -10,23 +10,11 @@ import { PropUtil } from './util';
 type TrackedObject = {
     object: any;
     structure: ComplexStructure;
-    refIDs: string[];
 };
 
 type NetClassInfo = {
     objectID: number;
 };
-
-type Reference =
-    | {
-          clientID: number;
-      }
-    | {
-          type: 'persist';
-      }
-    | {
-          objectID: number;
-      };
 
 type ObjectUpdate = {
     map: ObjectMap;
@@ -35,7 +23,6 @@ type ObjectUpdate = {
 
 export default class Tracker {
     private objects: Record<number, TrackedObject> = {};
-    private refs: Record<string, number[]> = {}; // Maps reference to object IDs
     private nextID: number = 1;
     private updates: Record<number, ObjectUpdate> = {};
 
@@ -88,9 +75,8 @@ export default class Tracker {
         map: ObjectStructureMap
     ): void {
         map[objectID] = this.getTrackedObject(objectID).structure;
-        for (const objID of this.getReferencedObjectIDs(
-            this.getRefID({ objectID })
-        )) {
+        const objIDs = this.getObjectIDDependencies(map[objectID]);
+        for (const objID of objIDs) {
             this.getObjectStructureMapInternal(objID, map);
         }
     }
@@ -111,41 +97,38 @@ export default class Tracker {
         this.objects[objectID] = {
             object,
             structure,
-            refIDs: [],
         };
-        this.referenceObjects(
-            { objectID },
-            this.getObjectIDDependencies(structure)
-        );
 
         // Handle DelayProxy
         if (DelayProxy.isProxy(object)) {
             const { setHandler } = DelayProxy.get(object);
             setHandler({
                 set: (target, prop, value, receiver) => {
-                    if (
-                        typeof value === 'object' &&
-                        !DelayProxy.isProxy(value)
-                    ) {
-                        value = DelayProxy.create(value);
-                    }
-                    // Dereference old object if last reference
-                    const oldValue = target[prop];
-                    if (typeof oldValue === 'object') {
-                        let multiReference = false;
-                        for (const [key, val] of Object.entries(target)) {
-                            if ((key !== prop && oldValue) === val) {
-                                multiReference = true;
-                            }
+                    if (typeof prop === 'string') {
+                        if (
+                            typeof value === 'object' &&
+                            !DelayProxy.isProxy(value)
+                        ) {
+                            value = DelayProxy.create(value);
                         }
-                        if (!multiReference) {
-                            this.dereferenceObject({ objectID });
+                        const update = this.getUpdate(objectID);
+                        update.map[prop] = this.getValue(value);
+                        const delIdx = update.deleted.indexOf(prop);
+                        if (delIdx >= 0) {
+                            update.deleted.splice(delIdx, 1);
                         }
                     }
-
-                    const valueID = this.trackObject(value);
-                    const update = this.getUpdate(objectID);
                     return Reflect.set(target, prop, value, receiver);
+                },
+                deleteProperty: (target, prop) => {
+                    if (typeof prop === 'string') {
+                        const update = this.getUpdate(objectID);
+                        if (!update.deleted.includes(prop)) {
+                            update.deleted.push(prop);
+                        }
+                        delete update.map[prop];
+                    }
+                    return Reflect.deleteProperty(target, prop);
                 },
             });
         }
@@ -225,71 +208,6 @@ export default class Tracker {
             addValues(struct.array ?? []);
         }
         return objectIDs;
-    }
-
-    referenceObjects(ref: Reference, objIDs: number[]) {
-        for (let objID of objIDs) {
-            this.referenceObject(ref, objID);
-        }
-    }
-
-    referenceObject(ref: Reference, objID: number) {
-        const refID = this.getRefID(ref);
-        // Add to this.objects
-        const trackedObject = this.getTrackedObject(objID);
-        if (!trackedObject.refIDs.includes(refID)) {
-            trackedObject.refIDs.push(refID);
-        }
-        // Add to this.refs
-        const objIDs = this.getReferencedObjectIDs(refID);
-        if (!objIDs.includes(objID)) {
-            objIDs.push(objID);
-        }
-        this.refs[refID] = objIDs;
-    }
-
-    dereferenceAllObjects(ref: Reference) {
-        const refID = this.getRefID(ref);
-        const objIDs = this.getReferencedObjectIDs(refID);
-        for (let objID of objIDs) {
-            this.dereferenceObjectInternal(refID, objID);
-        }
-    }
-
-    dereferenceObject(ref: Reference, objID: number) {
-        this.dereferenceObjectInternal(this.getRefID(ref), objID);
-    }
-
-    private dereferenceObjectInternal(refID: string, objectID: number) {
-        const obj = this.getTrackedObject(objectID);
-        obj.refIDs.splice(obj.refIDs.indexOf(refID), 1);
-        if (obj.refIDs.length === 0) {
-            this.dereferenceAllObjects({ objectID });
-            delete this.objects[objectID];
-        }
-        const allReferences = this.getReferencedObjectIDs(refID);
-        allReferences.splice(allReferences.indexOf(objectID), 1);
-        if (allReferences.length === 0) {
-            delete this.refs[refID];
-        }
-    }
-
-    private getReferencedObjectIDs(refID: string): number[] {
-        return this.refs[refID] ?? [];
-    }
-
-    private getRefID(ref: Reference): string {
-        if ('clientID' in ref) {
-            return `client-${ref.clientID}`;
-        } else if ('type' in ref) {
-            switch (ref.type) {
-                case 'persist':
-                    return 'persist';
-            }
-        } else if ('objectID' in ref) {
-            return `object-${ref.objectID}`;
-        }
-        throw new Error(`Invalid reference: ${JSON.stringify(ref)}`);
     }
 
     private getUpdate(objectID: number): ObjectUpdate {
