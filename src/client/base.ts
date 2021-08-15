@@ -1,14 +1,28 @@
-import { Message, Packet, PacketInit, PartialMessage } from '../internalTypes';
+import { EventEmitter } from 'events';
+import {
+    Message,
+    Packet,
+    PacketInit,
+    PartialMessage,
+    RPacket,
+    SPacket,
+} from '../internalTypes';
 import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
 
-export default class BaseClient {
+export interface IBaseClient {
+    on(event: 'spacket', listener: (packet: SPacket) => void): this;
+    send(msg: PartialMessage): Promise<RPacket>;
+}
+
+export default class BaseClient extends EventEmitter implements IBaseClient {
     private messageResolves: Record<string, Function>;
     private sendRaw: SocketSend<Message>;
 
     constructor(socket: INCSocket, private debugLogging: boolean) {
+        super();
         this.messageResolves = {};
-        this.sendRaw = handleSocket(socket, {
+        this.sendRaw = handleSocket<Message, Packet>(socket, {
             onJSON: (packet: Packet) => this.onPacket(packet),
         });
     }
@@ -22,8 +36,8 @@ export default class BaseClient {
         }
     }
 
-    async send(msg: PartialMessage): Promise<Packet> {
-        const packet: Packet = await new Promise((resolve) => {
+    async send(msg: PartialMessage): Promise<RPacket> {
+        const packet: RPacket = await new Promise((resolve) => {
             const msgID = this.getMessageID();
             this.messageResolves[msgID] = resolve;
             this.sendRaw({
@@ -40,6 +54,14 @@ export default class BaseClient {
     }
 
     private onPacket(packet: Packet) {
+        if ('msgID' in packet) {
+            this.onRPacket(packet);
+        } else {
+            this.onSPacket(packet);
+        }
+    }
+
+    private onRPacket(packet: RPacket) {
         const resolve = this.messageResolves[packet.msgID];
         if (!resolve) {
             throw new Error(
@@ -51,6 +73,10 @@ export default class BaseClient {
         }
         delete this.messageResolves[packet.msgID];
         resolve(packet);
+    }
+
+    private onSPacket(packet: SPacket) {
+        this.emit('spacket', packet);
     }
 
     async init(): Promise<PacketInit> {

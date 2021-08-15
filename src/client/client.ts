@@ -1,4 +1,4 @@
-import { FunctionRef, PacketInit } from '../internalTypes';
+import { FunctionRef, PacketInit, SPacket } from '../internalTypes';
 import {
     ComplexStructure,
     FunctionStructure,
@@ -10,7 +10,7 @@ import {
     ValueBundle,
 } from '../structureTypes';
 import { INCClient, INCSocket, NCClientOptions } from '../types';
-import BaseClient from './base';
+import BaseClient, { IBaseClient } from './base';
 
 type UpsertState = {
     map: ObjectStructureMap;
@@ -23,12 +23,21 @@ class NCClient<T> implements INCClient<T> {
     private idProperty: string;
 
     constructor(
-        private client: BaseClient,
+        private client: IBaseClient,
         { valueBundle, idProperty }: PacketInit
     ) {
         this.objects = {};
         this.idProperty = idProperty;
         this.proxy = this.convertValueBundle(valueBundle);
+        client.on('spacket', (packet) => this.onSPacket(packet));
+    }
+
+    private onSPacket(packet: SPacket) {
+        switch (packet.type) {
+            case 'update':
+                this.applyUpdateBundle(packet.bundle);
+                break;
+        }
     }
 
     private getProxy(value: StructureValue, upsert: UpsertState): any {

@@ -32,7 +32,7 @@ class Client<T> {
         socket: INCSocket
     ) {
         this.idMap = {};
-        const send = handleSocket(socket, {
+        const send = handleSocket<Packet, Message>(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
             onClose: () => {
                 this.server.clients.splice(
@@ -112,6 +112,11 @@ class Client<T> {
         }
         const value = tracker.getValue(result);
         const updates = tracker.popUpdates();
+        for (const client of this.server.clients) {
+            if (client !== this) {
+                client.sendUpdates(updates);
+            }
+        }
         return {
             type: 'call_func_result',
             valueBundle: this.getValueBundle(value),
@@ -132,9 +137,26 @@ class Client<T> {
         return { value, newObjects };
     }
 
+    private sendUpdates(updates: ObjectUpdateMap) {
+        const bundle = this.getUpdateBundle(updates);
+        if (
+            Object.keys(bundle.newObjects).length +
+                Object.keys(bundle.updates).length ===
+            0
+        ) {
+            return;
+        }
+        this.send({
+            type: 'update',
+            bundle,
+        });
+    }
+
     private getUpdateBundle(updates: ObjectUpdateMap): UpdateBundle {
         let newObjects: ObjectStructureMap = {};
-        for (const value of Object.values(updates)) {
+        for (const [strID, value] of Object.entries(updates)) {
+            const objID = parseInt(strID);
+            if (!this.syncedObjectIDs.includes(objID)) continue;
             for (const structVal of Object.values(value.map)) {
                 if (structVal.type === 'reference') {
                     newObjects = {

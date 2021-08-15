@@ -5,6 +5,10 @@ import { INCClient, INCServer, INCSocket } from '../types';
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
 
+function sleep(time: number) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+}
+
 function getSockets(delay: number = 1): [INCSocket, INCSocket] {
     const s1data: DataCB[] = [];
     const s2data: DataCB[] = [];
@@ -386,5 +390,28 @@ describe('Netclass - prop updates', () => {
         expect(alice.name).toBe('alice');
         await alice.setName('bob');
         expect(alice.name).toBe('bob');
+    });
+
+    test('multi client updates', async () => {
+        const A = NCServer.sync(
+            class {
+                static val: string = 'first';
+
+                static async setVal(val: string) {
+                    A.val = val;
+                }
+            }
+        );
+        const { clientObject: CA, server } = await initTest(A);
+        const [s1, s2] = getSockets();
+        server.connect(s1);
+        const client2 = await NetClass.createClient<typeof A>(s2);
+        const CA2 = client2.getObject();
+        expect(CA.val).toBe('first');
+        expect(CA2.val).toBe('first');
+        await CA.setVal('next');
+        expect(CA.val).toBe('next');
+        await sleep(10);
+        expect(CA2.val).toBe('next');
     });
 });

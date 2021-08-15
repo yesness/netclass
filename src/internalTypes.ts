@@ -49,11 +49,6 @@ export type PacketCallFuncResult = {
     updateBundle: UpdateBundle;
 };
 
-export type PacketUpdates = {
-    type: 'update';
-    bundle: UpdateBundle;
-};
-
 export type PacketError = {
     type: 'error';
     error: string;
@@ -61,4 +56,13 @@ export type PacketError = {
 
 export type PartialPacket = PacketInit | PacketCallFuncResult | PacketError;
 
-export type Packet = PartialPacket & MsgID;
+export type RPacket = PartialPacket & MsgID;
+
+export type SPacketUpdates = {
+    type: 'update';
+    bundle: UpdateBundle;
+};
+
+export type SPacket = SPacketUpdates;
+
+export type Packet = RPacket | SPacket;
