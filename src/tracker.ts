@@ -64,20 +64,25 @@ export default class Tracker {
         return this.objects[objID];
     }
 
-    getObjectStructureMap(objectID: number): ObjectStructureMap {
+    getObjectStructureMap(
+        objectID: number,
+        skipObjectIDs: number[] = []
+    ): ObjectStructureMap {
         const map: ObjectStructureMap = {};
-        this.getObjectStructureMapInternal(objectID, map);
+        this.getObjectStructureMapInternal(objectID, map, skipObjectIDs);
         return map;
     }
 
     private getObjectStructureMapInternal(
         objectID: number,
-        map: ObjectStructureMap
+        map: ObjectStructureMap,
+        skipObjectIDs: number[]
     ): void {
+        if (skipObjectIDs.includes(objectID)) return;
         map[objectID] = this.getTrackedObject(objectID).structure;
         const objIDs = this.getObjectIDDependencies(map[objectID]);
         for (const objID of objIDs) {
-            this.getObjectStructureMapInternal(objID, map);
+            this.getObjectStructureMapInternal(objID, map, skipObjectIDs);
         }
     }
 

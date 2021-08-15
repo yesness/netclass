@@ -128,16 +128,14 @@ class Client<T> {
         ) {
             return {};
         }
-        const map = this.server.tracker.getObjectStructureMap(value.objectID);
+        const map = this.server.tracker.getObjectStructureMap(
+            value.objectID,
+            this.syncedObjectIDs
+        );
         for (const strID of Object.keys(map)) {
             const objID = parseInt(strID);
-            if (this.syncedObjectIDs.includes(objID)) {
-                delete map[objID];
-            } else {
-                this.syncedObjectIDs.push(objID);
-            }
+            this.syncedObjectIDs.push(objID);
         }
-        this.syncedObjectIDs.push(value.objectID);
         return map;
     }
 

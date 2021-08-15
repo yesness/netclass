@@ -2,6 +2,5 @@ Figure out if __defineGetter__, __lookupSetter__, etc, work correctly
 Sync properties on update
 Conditionally track client side objects used as function arguments
 Track instances but not objects returned from function calls
-Optimize getObjectStructuresAndSync
 Use FinalizationRegistry client-side to let server know when we're done with objects
 Garbage collection with tracing
