@@ -1,4 +1,4 @@
-3 scenarios for tracking object
+4 scenarios for tracking object
 - server initialization
 - function return
 - updating property on synced object

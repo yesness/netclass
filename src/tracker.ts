@@ -3,6 +3,8 @@ import {
     ComplexStructure,
     ObjectMap,
     ObjectStructureMap,
+    ObjectUpdate,
+    ObjectUpdateMap,
     StructureValue,
 } from './structureTypes';
 import { PropUtil } from './util';
@@ -16,20 +18,25 @@ type NetClassInfo = {
     objectID: number;
 };
 
-type ObjectUpdate = {
-    map: ObjectMap;
-    deleted: string[];
-};
-
 export default class Tracker {
-    private objects: Record<number, TrackedObject> = {};
-    private nextID: number = 1;
-    private updates: Record<number, ObjectUpdate> = {};
-
-    constructor(public infoProperty: string) {}
+    static isTrackable(object: any): boolean {
+        return ['object', 'function'].includes(typeof object);
+    }
 
     private static isInstance(object: any): boolean {
         return object && object.constructor !== Object;
+    }
+
+    private objects: Record<number, TrackedObject> = {};
+    private nextID: number = 1;
+    private updates: ObjectUpdateMap = {};
+
+    constructor(public infoProperty: string) {}
+
+    popUpdates(): ObjectUpdateMap {
+        const updates = this.updates;
+        this.updates = {};
+        return updates;
     }
 
     getValue(object: any): StructureValue {
@@ -46,8 +53,8 @@ export default class Tracker {
             };
         }
 
-        // Handle objects and functions
-        else if (['object', 'function'].includes(typeof object)) {
+        // Handle trackable objects
+        else if (Tracker.isTrackable(object)) {
             return {
                 type: 'reference',
                 objectID: this.trackObject(object),
@@ -111,7 +118,7 @@ export default class Tracker {
                 set: (target, prop, value, receiver) => {
                     if (typeof prop === 'string') {
                         if (
-                            typeof value === 'object' &&
+                            Tracker.isTrackable(value) &&
                             !DelayProxy.isProxy(value)
                         ) {
                             value = DelayProxy.create(value);
@@ -134,6 +141,12 @@ export default class Tracker {
                         delete update.map[prop];
                     }
                     return Reflect.deleteProperty(target, prop);
+                },
+                construct: (target, args) => {
+                    const instance = Reflect.construct(target, args);
+                    const proxy = DelayProxy.create(instance);
+                    this.trackObject(proxy);
+                    return proxy;
                 },
             });
         }

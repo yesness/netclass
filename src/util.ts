@@ -1,3 +1,4 @@
+import DelayProxy from './delayProxy';
 import { INCSocket } from './types';
 
 export type SocketSend<T> = (json: T) => void;
@@ -98,7 +99,8 @@ class PropUtilClass {
                 (type === 'array' &&
                     (this.defaultArrayProps.includes(prop) ||
                         !isNaN(parseInt(prop)))) ||
-                prop === excludeProp
+                prop === excludeProp ||
+                prop === DelayProxy.propertyName
             ) {
                 return false;
             }

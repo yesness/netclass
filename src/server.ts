@@ -6,7 +6,13 @@ import {
     Packet,
     PartialPacket,
 } from './internalTypes';
-import { ObjectStructureMap, StructureValue } from './structureTypes';
+import {
+    ObjectStructureMap,
+    ObjectUpdateMap,
+    StructureValue,
+    UpdateBundle,
+    ValueBundle,
+} from './structureTypes';
 import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
@@ -82,24 +88,19 @@ class Client<T> {
     private async init(): Promise<PartialPacket> {
         return {
             type: 'init',
-            structure: {
-                value: this.server.structure,
-                newObjects: this.getObjectStructuresAndSync(
-                    this.server.structure
-                ),
-            },
+            valueBundle: this.getValueBundle(this.server.structure),
             idProperty: this.server.tracker.infoProperty,
         };
     }
 
     private async callFunc(msg: MessageCallFunc): Promise<PartialPacket> {
+        const { tracker } = this.server;
         const func = this.getFunction(msg.functionRef);
         const args = msg.args.map((arg) => {
             if (arg.type === 'raw') {
                 return arg.arg;
             } else {
-                return this.server.tracker.getTrackedObject(arg.objectID)
-                    .object;
+                return tracker.getTrackedObject(arg.objectID).object;
             }
         });
         const maybeResult = func(...args);
@@ -109,33 +110,53 @@ class Client<T> {
         } else {
             result = maybeResult;
         }
-        const value = this.server.tracker.getValue(result);
+        const value = tracker.getValue(result);
+        const updates = tracker.popUpdates();
         return {
             type: 'call_func_result',
-            result: {
-                value,
-                newObjects: this.getObjectStructuresAndSync(value),
-            },
+            valueBundle: this.getValueBundle(value),
+            updateBundle: this.getUpdateBundle(updates),
         };
     }
 
-    private getObjectStructuresAndSync(
-        value: StructureValue
-    ): ObjectStructureMap {
-        if (
-            value.type === 'simple' ||
-            this.syncedObjectIDs.includes(value.objectID)
-        ) {
-            return {};
+    private getValueBundle(value: StructureValue): ValueBundle {
+        let newObjects: ObjectStructureMap = {};
+        if (value.type === 'reference') {
+            newObjects = this.updateSyncedObjectIDs(
+                this.server.tracker.getObjectStructureMap(
+                    value.objectID,
+                    this.syncedObjectIDs
+                )
+            );
         }
-        const map = this.server.tracker.getObjectStructureMap(
-            value.objectID,
-            this.syncedObjectIDs
+        return { value, newObjects };
+    }
+
+    private getUpdateBundle(updates: ObjectUpdateMap): UpdateBundle {
+        let newObjects: ObjectStructureMap = {};
+        for (const value of Object.values(updates)) {
+            for (const structVal of Object.values(value.map)) {
+                if (structVal.type === 'reference') {
+                    newObjects = {
+                        ...newObjects,
+                        ...this.server.tracker.getObjectStructureMap(
+                            structVal.objectID,
+                            this.syncedObjectIDs
+                        ),
+                    };
+                }
+            }
+        }
+        return {
+            updates,
+            newObjects: this.updateSyncedObjectIDs(newObjects),
+        };
+    }
+
+    private updateSyncedObjectIDs(map: ObjectStructureMap): ObjectStructureMap {
+        this.syncedObjectIDs = this.syncedObjectIDs.concat(
+            Object.keys(map).map((strID) => parseInt(strID))
         );
-        for (const strID of Object.keys(map)) {
-            const objID = parseInt(strID);
-            this.syncedObjectIDs.push(objID);
-        }
         return map;
     }
 
@@ -186,6 +207,7 @@ export default class NCServer<T> implements INCServer {
         if (options?.recursive ?? true) {
             const obj: any = object;
             for (const [key, value] of Object.entries(object)) {
+                if (!Tracker.isTrackable(value)) continue;
                 obj[key] = this.sync(value, options);
             }
         }

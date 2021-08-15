@@ -6,7 +6,8 @@ import {
     ObjectStructure,
     ObjectStructureMap,
     StructureValue,
-    ValueAndObjects,
+    UpdateBundle,
+    ValueBundle,
 } from '../structureTypes';
 import { INCClient, INCSocket, NCClientOptions } from '../types';
 import BaseClient from './base';
@@ -23,14 +24,11 @@ class NCClient<T> implements INCClient<T> {
 
     constructor(
         private client: BaseClient,
-        { structure, idProperty }: PacketInit
+        { valueBundle, idProperty }: PacketInit
     ) {
         this.objects = {};
         this.idProperty = idProperty;
-        this.proxy = this.getProxy(structure.value, {
-            map: structure.newObjects,
-            completedIDs: [],
-        });
+        this.proxy = this.convertValueBundle(valueBundle);
     }
 
     private getProxy(value: StructureValue, upsert: UpsertState): any {
@@ -159,17 +157,28 @@ class NCClient<T> implements INCClient<T> {
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');
         }
-        return this.convertValueAndObjects(packet.result);
+        this.applyUpdateBundle(packet.updateBundle);
+        return this.convertValueBundle(packet.valueBundle);
     }
 
-    private convertValueAndObjects({
-        value,
-        newObjects,
-    }: ValueAndObjects): any {
+    private convertValueBundle({ value, newObjects }: ValueBundle): any {
         return this.getProxy(value, {
             map: newObjects,
             completedIDs: [],
         });
+    }
+
+    private applyUpdateBundle({ updates, newObjects }: UpdateBundle) {
+        for (const [strID, update] of Object.entries(updates)) {
+            const objID = parseInt(strID);
+            const object = this.objects[objID];
+            for (const key of update.deleted) {
+                delete object[key];
+            }
+            for (const [key, value] of Object.entries(update.map)) {
+                object[key] = this.convertValueBundle({ value, newObjects });
+            }
+        }
     }
 }
 

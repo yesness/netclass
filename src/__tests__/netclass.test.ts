@@ -1,4 +1,5 @@
 import NetClass from '..';
+import NCServer from '../server';
 import { INCClient, INCServer, INCSocket } from '../types';
 
 type DataCB = (data: Buffer) => void;
@@ -360,5 +361,30 @@ describe('NetClass - general', () => {
         expect(alice.name).toBe('alice');
         await ClientA.setPerson(alice);
         expect(await ClientA.getPerson()).toBe(alice);
+    });
+});
+
+describe('Netclass - prop updates', () => {
+    test('simple updates', async () => {
+        const Person = NCServer.sync(
+            class P {
+                static nextID: number = 1;
+                static async create(name: string): Promise<P> {
+                    return new Person(Person.nextID++, name);
+                }
+                constructor(public id: number, public name: string) {}
+                async setName(name: string) {
+                    this.name = name;
+                }
+            }
+        );
+        const { clientObject: CPerson } = await initTest(Person);
+        expect(CPerson.nextID).toBe(1);
+        const alice = await CPerson.create('alice');
+        expect(CPerson.nextID).toBe(2);
+        expect(alice.id).toBe(1);
+        expect(alice.name).toBe('alice');
+        await alice.setName('bob');
+        expect(alice.name).toBe('bob');
     });
 });

@@ -1,4 +1,4 @@
-import { ObjectMap, ValueAndObjects } from './structureTypes';
+import { UpdateBundle, ValueBundle } from './structureTypes';
 
 type MsgID = {
     msgID: string;
@@ -39,23 +39,19 @@ export type Message = PartialMessage & MsgID;
 
 export type PacketInit = {
     type: 'init';
-    structure: ValueAndObjects;
     idProperty: string;
+    valueBundle: ValueBundle;
 };
 
 export type PacketCallFuncResult = {
     type: 'call_func_result';
-    result: ValueAndObjects;
+    valueBundle: ValueBundle;
+    updateBundle: UpdateBundle;
 };
 
 export type PacketUpdates = {
     type: 'update';
-    objects: Record<
-        number,
-        {
-            updates: ObjectMap;
-        }
-    >;
+    bundle: UpdateBundle;
 };
 
 export type PacketError = {
