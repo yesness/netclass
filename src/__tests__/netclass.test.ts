@@ -42,17 +42,19 @@ function getSockets(delay: number = 1): [INCSocket, INCSocket] {
     return [s1, s2];
 }
 
-async function initTest<T>(
-    object: T,
-    debugLogging?: boolean
-): Promise<{
+type TestData<T> = {
     s1: INCSocket;
     s2: INCSocket;
     server: INCServer;
     client: INCClient<T>;
     serverObject: T;
     clientObject: T;
-}> {
+};
+
+async function initTest<T>(
+    object: T,
+    debugLogging?: boolean
+): Promise<TestData<T>> {
     const [s1, s2] = getSockets();
     const server = NetClass.createServer<T>({
         object,
@@ -68,6 +70,26 @@ async function initTest<T>(
         client,
         serverObject: object,
         clientObject,
+    };
+}
+
+type MultiTestData<T> = TestData<T> & {
+    client2: INCClient<T>;
+    clientObject2: T;
+};
+
+async function initMultiClientTest<T>(
+    object: T,
+    debugLogging?: boolean
+): Promise<MultiTestData<T>> {
+    const testData = await initTest(object, debugLogging);
+    const [s1, s2] = getSockets();
+    testData.server.connect(s1);
+    const client2 = await NetClass.createClient<T>(s2);
+    return {
+        ...testData,
+        client2,
+        clientObject2: client2.getObject(),
     };
 }
 
@@ -402,16 +424,44 @@ describe('Netclass - prop updates', () => {
                 }
             }
         );
-        const { clientObject: CA, server } = await initTest(A);
-        const [s1, s2] = getSockets();
-        server.connect(s1);
-        const client2 = await NetClass.createClient<typeof A>(s2);
-        const CA2 = client2.getObject();
+        const { clientObject: CA, clientObject2: CA2 } =
+            await initMultiClientTest(A);
         expect(CA.val).toBe('first');
         expect(CA2.val).toBe('first');
         await CA.setVal('next');
         expect(CA.val).toBe('next');
         await sleep(10);
         expect(CA2.val).toBe('next');
+    });
+
+    test('new values are proxies', async () => {
+        const A = NCServer.sync(
+            class {
+                static obj: any = { a: 1 };
+
+                static async set(path: string[], key: string, val: any) {
+                    let obj = A.obj;
+                    for (let p of path) {
+                        if (!(p in obj)) {
+                            obj[p] = {};
+                        }
+                        obj = obj[p];
+                    }
+                    obj[key] = val;
+                }
+            }
+        );
+        const { clientObject: CA, clientObject2: CA2 } =
+            await initMultiClientTest(A);
+        expect(CA.obj).toEqual({ a: 1 });
+        expect(CA2.obj).toEqual({ a: 1 });
+        await CA.set([], 'a', 'hello');
+        expect(CA.obj).toEqual({ a: 'hello' });
+        await sleep(10);
+        expect(CA2.obj).toEqual({ a: 'hello' });
+        await CA2.set(['b', 'c'], 'd', 'eee');
+        expect(CA2.obj).toEqual({ a: 'hello', b: { c: { d: 'eee' } } });
+        await sleep(10);
+        expect(CA.obj).toEqual({ a: 'hello', b: { c: { d: 'eee' } } });
     });
 });

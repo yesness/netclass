@@ -130,7 +130,10 @@ export default class Tracker {
                             update.deleted.splice(delIdx, 1);
                         }
                     }
-                    return Reflect.set(target, prop, value, receiver);
+                    const result = Reflect.set(target, prop, value, receiver);
+                    this.objects[objectID].structure =
+                        this.getComplexStructure(target);
+                    return result;
                 },
                 deleteProperty: (target, prop) => {
                     if (typeof prop === 'string') {
@@ -140,7 +143,10 @@ export default class Tracker {
                         }
                         delete update.map[prop];
                     }
-                    return Reflect.deleteProperty(target, prop);
+                    const result = Reflect.deleteProperty(target, prop);
+                    this.objects[objectID].structure =
+                        this.getComplexStructure(target);
+                    return result;
                 },
                 construct: (target, args) => {
                     const instance = Reflect.construct(target, args);
