@@ -25,7 +25,7 @@ type SyncOptions = {
 class Client<T> {
     private idMap: Record<number, number>;
     private send: SocketSend<Packet>;
-    private syncedObjectIDs: number[];
+    syncedObjectIDs: number[];
 
     constructor(
         private id: number,
@@ -35,12 +35,7 @@ class Client<T> {
         this.idMap = {};
         const send = handleSocket<Packet, Message>(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
-            onClose: () => {
-                this.server.clients.splice(
-                    this.server.clients.indexOf(this),
-                    1
-                );
-            },
+            onClose: () => this.server.onDisconnect(this),
         });
         this.send = (packet: Packet) => {
             if (this.server.debugLogging) {
@@ -237,6 +232,22 @@ export default class NCServer<T> implements INCServer {
     connect(socket: INCSocket): void {
         const client = new Client(this.nextClientID++, this, socket);
         this.clients.push(client);
+    }
+
+    onDisconnect(client: Client<T>) {
+        const idx = this.clients.indexOf(client);
+        if (idx === -1) {
+            throw new Error('Client disconnected but was not tracked');
+        }
+        this.clients.splice(idx, 1);
+        let rootIDs = [];
+        if (this.structure.type === 'reference') {
+            rootIDs.push(this.structure.objectID);
+        }
+        for (const client of this.clients) {
+            rootIDs = rootIDs.concat(client.syncedObjectIDs);
+        }
+        this.tracker.garbageCollect(rootIDs);
     }
 
     static sync<T extends object>(object: T, options?: SyncOptions): T {

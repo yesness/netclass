@@ -76,6 +76,8 @@ async function initTest<T>(
 type MultiTestData<T> = TestData<T> & {
     client2: INCClient<T>;
     clientObject2: T;
+    c2s1: INCSocket;
+    c2s2: INCSocket;
 };
 
 async function initMultiClientTest<T>(
@@ -90,6 +92,8 @@ async function initMultiClientTest<T>(
         ...testData,
         client2,
         clientObject2: client2.getObject(),
+        c2s1: s1,
+        c2s2: s2,
     };
 }
 
@@ -492,5 +496,102 @@ describe('Netclass - prop updates', () => {
         expect(CA2.obj).toEqual({ a: 'hello', b: { c: { d: 'eee' } } });
         await sleep(10);
         expect(CA.obj).toEqual({ a: 'hello', b: { c: { d: 'eee' } } });
+    });
+});
+
+describe('Netclass - garbage collection', () => {
+    test('simple gc', async () => {
+        class A {
+            static async wrap(n: number) {
+                return { n };
+            }
+        }
+        const {
+            server,
+            s2,
+            c2s2,
+            clientObject: CA,
+            clientObject2: CA2,
+        } = await initMultiClientTest(A);
+        const base = 2;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        await CA.wrap(1);
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        await CA.wrap(1);
+        expect(getNumTrackedObjects(server)).toBe(base + 2);
+        await CA.wrap(1);
+        expect(getNumTrackedObjects(server)).toBe(base + 3);
+        await CA2.wrap(1);
+        expect(getNumTrackedObjects(server)).toBe(base + 4);
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        c2s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+    });
+
+    test('instance gc', async () => {
+        class Person {
+            static async create(name: string) {
+                return new Person(name);
+            }
+            constructor(public name: string) {}
+        }
+        const {
+            server,
+            s2,
+            c2s2,
+            clientObject: CA,
+            clientObject2: CA2,
+        } = await initMultiClientTest(Person);
+        const base = 2;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        await CA.create('a');
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        await CA.create('b');
+        expect(getNumTrackedObjects(server)).toBe(base + 2);
+        await CA2.create('c');
+        expect(getNumTrackedObjects(server)).toBe(base + 3);
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        c2s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+    });
+
+    test('shared object', async () => {
+        let db: { value: any } = NCServer.sync({ value: { a: 1 } });
+        const {
+            server,
+            clientObject: CA,
+            clientObject2: CA2,
+            s2,
+            c2s2,
+        } = await initMultiClientTest({
+            set: async (value: any) => {
+                db.value = value;
+            },
+            get: async () => {
+                return db;
+            },
+        });
+        const base = 3;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        const db1 = await CA.get();
+        expect(db1.value).toEqual({ a: 1 });
+        expect(getNumTrackedObjects(server)).toBe(base + 2);
+        const db2 = await CA2.get();
+        expect(db2.value).toEqual({ a: 1 });
+        expect(getNumTrackedObjects(server)).toBe(base + 2);
+        const newVal = { b: 2 };
+        await CA.set(newVal);
+        expect(getNumTrackedObjects(server)).toBe(base + 3);
+        // TODO once GC is run, we should delete the OG {a:1} and tell all clients to delete as well
+        expect(db1.value).toBe(newVal);
+        await sleep(10);
+        expect(getNumTrackedObjects(server)).toBe(base + 3);
+        expect(db2.value).toEqual({ b: 2 });
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base + 3);
+        c2s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
     });
 });

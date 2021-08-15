@@ -92,6 +92,28 @@ export default class Tracker {
         return map;
     }
 
+    garbageCollect(rootObjectIDs: number[]) {
+        const allIDs = Object.keys(this.objects).map((strID) =>
+            parseInt(strID)
+        );
+        const mark = (id: number) => {
+            const idx = allIDs.indexOf(id);
+            if (idx >= 0) allIDs.splice(idx, 1);
+        };
+        let todo = rootObjectIDs.slice();
+        while (todo.length > 0) {
+            const id = todo.pop() ?? -1;
+            if (!allIDs.includes(id)) continue;
+            mark(id);
+            todo = todo.concat(
+                this.getObjectIDDependencies(this.objects[id].structure)
+            );
+        }
+        for (const objID of allIDs) {
+            delete this.objects[objID];
+        }
+    }
+
     private getInfo(object: any): NetClassInfo | null {
         return object[this.infoProperty] ?? null;
     }
