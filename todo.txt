@@ -1,6 +1,6 @@
 Figure out if __defineGetter__, __lookupSetter__, etc, work correctly
-Conditionally track client side objects used as function arguments
 Track instances but not objects returned from function calls
 Use FinalizationRegistry and WeakRef client-side to let server know when we're done with objects
 Garbage collection with tracing
 Optimize structure recalculation in proxy set/deleteProperty
+Debug client.ts when value.objectID in upsert.map and value.objectID in this.objects

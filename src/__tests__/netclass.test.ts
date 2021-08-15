@@ -388,6 +388,35 @@ describe('NetClass - general', () => {
         await ClientA.setPerson(alice);
         expect(await ClientA.getPerson()).toBe(alice);
     });
+
+    test('track function arguments', async () => {
+        const A = NCServer.sync(
+            class {
+                static obj: any = { a: 1 };
+
+                static async setObj(obj: any) {
+                    A.obj = obj;
+                    A.obj.hi = true;
+                }
+            }
+        );
+        const { clientObject: CA, clientObject2: CA2 } =
+            await initMultiClientTest(A);
+        const obj1 = CA.obj;
+        const obj2 = CA2.obj;
+        expect(obj1).toEqual({ a: 1 });
+        expect(obj2).toEqual({ a: 1 });
+        expect(obj1).not.toBe(obj2);
+        const newObj = { b: 2 };
+        await CA.setObj(newObj);
+        expect(newObj).toEqual({ b: 2, hi: true });
+        expect(CA.obj).not.toBe(obj1);
+        expect(CA.obj).toBe(newObj);
+        await sleep(10);
+        expect(CA2.obj).not.toBe(obj2);
+        expect(CA2.obj).not.toBe(newObj);
+        expect(CA2.obj).toEqual(newObj);
+    });
 });
 
 describe('Netclass - prop updates', () => {

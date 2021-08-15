@@ -71,6 +71,18 @@ export default class Tracker {
         return this.objects[objID];
     }
 
+    isTracked(object: any): boolean {
+        return this.getInfo(object) !== null;
+    }
+
+    getTrackedObjectID(object: any): number {
+        const info = this.getInfo(object);
+        if (info === null) {
+            throw new Error('Object is not tracked');
+        }
+        return info.objectID;
+    }
+
     getObjectStructureMap(
         objectID: number,
         skipObjectIDs: number[] = []
@@ -78,6 +90,10 @@ export default class Tracker {
         const map: ObjectStructureMap = {};
         this.getObjectStructureMapInternal(objectID, map, skipObjectIDs);
         return map;
+    }
+
+    private getInfo(object: any): NetClassInfo | null {
+        return object[this.infoProperty] ?? null;
     }
 
     private getObjectStructureMapInternal(
@@ -94,9 +110,9 @@ export default class Tracker {
     }
 
     private trackObject(object: any): number {
-        if (this.infoProperty in object) {
-            const { objectID }: NetClassInfo = object[this.infoProperty];
-            return objectID;
+        const info = this.getInfo(object);
+        if (info !== null) {
+            return info.objectID;
         }
         const objectID = this.nextID++;
         const ncInfo: NetClassInfo = {

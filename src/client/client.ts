@@ -166,6 +166,9 @@ class NCClient<T> implements INCClient<T> {
         if (packet.type !== 'call_func_result') {
             throw new Error('Invalid response packet');
         }
+        for (const trackArg of packet.trackArgs) {
+            this.objects[trackArg.objectID] = args[trackArg.idx];
+        }
         this.applyUpdateBundle(packet.updateBundle);
         return this.convertValueBundle(packet.valueBundle);
     }

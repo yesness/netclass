@@ -46,6 +46,10 @@ export type PacketInit = {
 export type PacketCallFuncResult = {
     type: 'call_func_result';
     valueBundle: ValueBundle;
+    trackArgs: Array<{
+        idx: number;
+        objectID: number;
+    }>;
     updateBundle: UpdateBundle;
 };
 

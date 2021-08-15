@@ -4,6 +4,7 @@ import {
     Message,
     MessageCallFunc,
     Packet,
+    PacketCallFuncResult,
     PartialPacket,
 } from './internalTypes';
 import {
@@ -117,10 +118,23 @@ class Client<T> {
                 client.sendUpdates(updates);
             }
         }
+        const trackArgs: PacketCallFuncResult['trackArgs'] = [];
+        const updateBundle = this.getUpdateBundle(updates);
+        msg.args.forEach((arg, idx) => {
+            if (arg.type === 'raw' && tracker.isTracked(arg.arg)) {
+                const objectID = tracker.getTrackedObjectID(arg.arg);
+                trackArgs.push({
+                    idx,
+                    objectID,
+                });
+                delete updateBundle.newObjects[objectID]; // TODO this is a little messy
+            }
+        });
         return {
             type: 'call_func_result',
             valueBundle: this.getValueBundle(value),
-            updateBundle: this.getUpdateBundle(updates),
+            trackArgs,
+            updateBundle,
         };
     }
 
