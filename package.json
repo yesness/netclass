@@ -1,7 +1,7 @@
 {
     "name": "@yesness/netclass",
     "version": "1.0.0",
-    "description": "Call methods on classes remotely.",
+    "description": "Proxy classes, objects, and functions over a network connection.",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
     "files": [
@@ -24,9 +24,9 @@
     "author": "rcpooley",
     "license": "ISC",
     "bugs": {
-        "url": "https://github.com/netclass/assert/issues"
+        "url": "https://github.com/yesness/netclass/issues"
     },
-    "homepage": "https://github.com/netclass/assert#readme",
+    "homepage": "https://github.com/yesness/netclass#readme",
     "devDependencies": {
         "@babel/plugin-transform-modules-commonjs": "^7.10.4",
         "@babel/preset-typescript": "^7.10.4",
