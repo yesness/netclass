@@ -224,7 +224,8 @@ export default class NCServer<T> implements INCServer {
     constructor(options: NCServerOptions<T>) {
         this.debugLogging = options.debugLogging ?? false;
         this.tracker = new Tracker(
-            options.netclassPropertyName ?? '_netclass_info'
+            options.netclassPropertyName ?? '_netclass_info',
+            !(options.includeUnderscoreProperties ?? false)
         );
         this.structure = this.tracker.getValue(options.object);
     }

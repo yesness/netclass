@@ -31,7 +31,10 @@ export default class Tracker {
     private nextID: number = 1;
     private updates: ObjectUpdateMap = {};
 
-    constructor(public infoProperty: string) {}
+    constructor(
+        public infoProperty: string,
+        private excludeUnderscore: boolean
+    ) {}
 
     popUpdates(): ObjectUpdateMap {
         const updates = this.updates;
@@ -215,7 +218,10 @@ export default class Tracker {
                     funcs = PropUtil.getAllProps(
                         Object.getPrototypeOf(object),
                         'instance',
-                        this.infoProperty
+                        {
+                            excludeProp: this.infoProperty,
+                            excludeUnderscore: this.excludeUnderscore,
+                        }
                     );
                     type = 'instance';
                 }
@@ -248,7 +254,10 @@ export default class Tracker {
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
-        const props = PropUtil.getAllProps(object, type, this.infoProperty);
+        const props = PropUtil.getAllProps(object, type, {
+            excludeProp: this.infoProperty,
+            excludeUnderscore: this.excludeUnderscore,
+        });
         for (let prop of props) {
             if (excludeFuncs.includes(prop)) continue;
             map[prop] = this.getValue(object[prop]);

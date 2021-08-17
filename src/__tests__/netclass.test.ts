@@ -1,6 +1,6 @@
 import NetClass from '..';
 import NCServer from '../server';
-import { INCClient, INCServer, INCSocket } from '../types';
+import { INCClient, INCServer, INCSocket, NCServerOptions } from '../types';
 
 type DataCB = (data: Buffer) => void;
 type CloseCB = () => void;
@@ -53,12 +53,12 @@ type TestData<T> = {
 
 async function initTest<T>(
     object: T,
-    debugLogging?: boolean
+    options?: Omit<NCServerOptions<T>, 'object'>
 ): Promise<TestData<T>> {
     const [s1, s2] = getSockets();
     const server = NetClass.createServer<T>({
         object,
-        debugLogging,
+        ...options,
     });
     server.connect(s1);
     const client = await NetClass.createClient<T>(s2);
@@ -82,9 +82,9 @@ type MultiTestData<T> = TestData<T> & {
 
 async function initMultiClientTest<T>(
     object: T,
-    debugLogging?: boolean
+    options?: Omit<NCServerOptions<T>, 'object'>
 ): Promise<MultiTestData<T>> {
-    const testData = await initTest(object, debugLogging);
+    const testData = await initTest(object, options);
     const [s1, s2] = getSockets();
     testData.server.connect(s1);
     const client2 = await NetClass.createClient<T>(s2);
@@ -420,6 +420,46 @@ describe('NetClass - general', () => {
         expect(CA2.obj).not.toBe(obj2);
         expect(CA2.obj).not.toBe(newObj);
         expect(CA2.obj).toEqual(newObj);
+    });
+
+    test('exclude underscores', async () => {
+        const obj = {
+            a: {
+                b: 1,
+                _c: 2,
+            },
+            _d: 3,
+            e: 'yes',
+        };
+        const { clientObject } = await initTest(obj);
+        expect(clientObject).toEqual({
+            a: {
+                b: 1,
+            },
+            e: 'yes',
+        });
+    });
+
+    test('include underscores', async () => {
+        const obj = {
+            a: {
+                b: 1,
+                _c: 2,
+            },
+            _d: 3,
+            e: 'yes',
+        };
+        const { clientObject } = await initTest(obj, {
+            includeUnderscoreProperties: true,
+        });
+        expect(clientObject).toEqual({
+            a: {
+                b: 1,
+                _c: 2,
+            },
+            _d: 3,
+            e: 'yes',
+        });
     });
 });
 

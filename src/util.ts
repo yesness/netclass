@@ -76,8 +76,13 @@ class PropUtilClass {
     getAllProps(
         toCheck: any,
         type: 'function' | 'instance' | 'object' | 'array',
-        excludeProp?: string
+        options?: {
+            excludeProp?: string;
+            excludeUnderscore?: boolean;
+        }
     ): string[] {
+        const excludeProp = options?.excludeProp;
+        const excludeUnderscore = options?.excludeUnderscore ?? true;
         const props: string[] = [];
         let obj = toCheck;
         while (true) {
@@ -99,8 +104,9 @@ class PropUtilClass {
                 (type === 'array' &&
                     (this.defaultArrayProps.includes(prop) ||
                         !isNaN(parseInt(prop)))) ||
-                prop === excludeProp ||
-                prop === DelayProxy.propertyName
+                prop === options?.excludeProp ||
+                prop === DelayProxy.propertyName ||
+                (excludeUnderscore && prop.startsWith('_'))
             ) {
                 return false;
             }
