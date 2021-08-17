@@ -5,11 +5,12 @@ import {
     ObjectStructureMap,
     ObjectUpdate,
     ObjectUpdateMap,
+    SimpleValue,
     StructureValue,
 } from './structureTypes';
 import { GetAllPropsType, PropUtil } from './util';
 
-export const NC_UNTRACKED_PROP = '_netclass_untracked';
+export const NC_TRACKED_PROP = '_netclass_tracked';
 
 type TrackedObject = {
     object: any;
@@ -22,15 +23,22 @@ type NetClassInfo = {
 
 export default class Tracker {
     static isTrackable(object: any): boolean {
-        return ['object', 'function'].includes(typeof object);
+        return object != null && ['object', 'function'].includes(typeof object);
     }
 
-    static markUntracked(object: object) {
-        Object.defineProperty(object, NC_UNTRACKED_PROP, { value: true });
+    static setTracked(object: object, tracked: boolean) {
+        Object.defineProperty(object, NC_TRACKED_PROP, { value: tracked });
     }
 
     private static isInstance(object: any): boolean {
         return object && object.constructor !== Object;
+    }
+
+    private static getSimpleValue(value: any): SimpleValue {
+        return {
+            type: 'simple',
+            value,
+        };
     }
 
     private objects: Record<number, TrackedObject> = {};
@@ -48,25 +56,35 @@ export default class Tracker {
         return updates;
     }
 
-    getValue(object: any): StructureValue {
+    getFunctionReturnValue(
+        object: any,
+        defaultTracked: boolean
+    ): StructureValue {
         const trackable = Tracker.isTrackable(object);
+        if (trackable && NC_TRACKED_PROP in object) {
+            return object[NC_TRACKED_PROP]
+                ? this.getValue(object)
+                : Tracker.getSimpleValue(object);
+        } else {
+            return defaultTracked
+                ? this.getValue(object)
+                : Tracker.getSimpleValue(object);
+        }
+    }
 
+    getValue(object: any): StructureValue {
         // Handle simple values
         if (
             ['string', 'number', 'boolean', 'undefined'].includes(
                 typeof object
             ) ||
-            object === null ||
-            (trackable && object[NC_UNTRACKED_PROP] === true)
+            object === null
         ) {
-            return {
-                type: 'simple',
-                value: object,
-            };
+            return Tracker.getSimpleValue(object);
         }
 
         // Handle trackable objects
-        else if (trackable) {
+        else if (Tracker.isTrackable(object)) {
             return {
                 type: 'reference',
                 objectID: this.trackObject(object),
@@ -295,7 +313,7 @@ export default class Tracker {
 
     private getAllProps(object: any, type: GetAllPropsType): string[] {
         return PropUtil.getAllProps(object, type, {
-            excludeProps: [this.infoProperty, NC_UNTRACKED_PROP],
+            excludeProps: [this.infoProperty, NC_TRACKED_PROP],
             excludeUnderscore: this.excludeUnderscore,
         });
     }

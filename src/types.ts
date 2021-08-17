@@ -1,6 +1,7 @@
 export type NCServerOptions<T> = {
     object: T;
     includeUnderscoreProperties?: boolean; // default: false
+    trackFunctionReturnValues?: boolean; // default: true
     netclassPropertyName?: string; // default: "_netclass_info"
     debugLogging?: boolean;
 };

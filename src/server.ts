@@ -106,7 +106,10 @@ class Client<T> {
         } else {
             result = maybeResult;
         }
-        const value = tracker.getValue(result);
+        const value = tracker.getFunctionReturnValue(
+            result,
+            this.server.trackFunctionReturnValues
+        );
         const updates = tracker.popUpdates();
         for (const client of this.server.clients) {
             if (client !== this) {
@@ -220,6 +223,7 @@ export default class NCServer<T> implements INCServer {
     structure: StructureValue;
     clients: Client<T>[] = [];
     private nextClientID: number = 1;
+    trackFunctionReturnValues: boolean;
 
     constructor(options: NCServerOptions<T>) {
         this.debugLogging = options.debugLogging ?? false;
@@ -228,6 +232,8 @@ export default class NCServer<T> implements INCServer {
             !(options.includeUnderscoreProperties ?? false)
         );
         this.structure = this.tracker.getValue(options.object);
+        this.trackFunctionReturnValues =
+            options.trackFunctionReturnValues ?? true;
     }
 
     connect(socket: INCSocket): void {
@@ -266,8 +272,13 @@ export default class NCServer<T> implements INCServer {
         }
     }
 
+    static tracked<T extends object>(object: T): T {
+        Tracker.setTracked(object, true);
+        return object;
+    }
+
     static untracked<T extends object>(object: T): T {
-        Tracker.markUntracked(object);
+        Tracker.setTracked(object, false);
         return object;
     }
 }

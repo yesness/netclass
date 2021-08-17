@@ -1,4 +1,4 @@
-type SimpleValue = {
+export type SimpleValue = {
     type: 'simple';
     value: string | number | boolean | null | undefined;
 };

@@ -635,46 +635,74 @@ describe('Netclass - garbage collection', () => {
         expect(getNumTrackedObjects(server)).toBe(base);
     });
 
-    test('tracked function return', async () => {
-        class A {
-            private static _obj: any = { a: 1 };
+    function trackedFunctionReturnTest(options: {
+        wrapTracked: boolean;
+        wrapUntracked: boolean;
+        defaultTracked: boolean;
+        isTracked: boolean;
+    }) {
+        test(`function return ${JSON.stringify(options)}`, async () => {
+            class A {
+                private static _obj: any = { a: 1 };
 
-            static async foo() {
-                return A._obj;
+                static async foo() {
+                    if (options.wrapTracked) {
+                        return NCServer.tracked(A._obj);
+                    } else if (options.wrapUntracked) {
+                        return NCServer.untracked(A._obj);
+                    } else {
+                        return A._obj;
+                    }
+                }
             }
-        }
-        const { server, clientObject: CA, s2 } = await initTest(A);
-        const base = 2;
-        expect(getNumTrackedObjects(server)).toBe(base);
-        const obj = await CA.foo();
-        expect(obj).toEqual({ a: 1 });
-        expect(getNumTrackedObjects(server)).toBe(base + 1);
-        const obj2 = await CA.foo();
-        expect(obj2).toBe(obj);
-        expect(getNumTrackedObjects(server)).toBe(base + 1);
-        s2.close();
-        expect(getNumTrackedObjects(server)).toBe(base);
+            const {
+                server,
+                clientObject: CA,
+                s2,
+            } = await initTest(A, {
+                trackFunctionReturnValues: options.defaultTracked,
+            });
+            const base = 2;
+            const add = options.isTracked ? 1 : 0;
+            expect(getNumTrackedObjects(server)).toBe(base);
+            const obj = await CA.foo();
+            expect(getNumTrackedObjects(server)).toBe(base + add);
+            expect(obj).toEqual({ a: 1 });
+            const obj2 = await CA.foo();
+            expect(getNumTrackedObjects(server)).toBe(base + add);
+            expect(obj2).toEqual({ a: 1 });
+            if (options.isTracked) {
+                expect(obj2).toBe(obj);
+            } else {
+                expect(obj2).not.toBe(obj);
+            }
+            s2.close();
+            expect(getNumTrackedObjects(server)).toBe(base);
+        });
+    }
+
+    trackedFunctionReturnTest({
+        wrapTracked: false,
+        wrapUntracked: false,
+        defaultTracked: true,
+        isTracked: true,
     });
-
-    test('untracked function return', async () => {
-        class A {
-            private static _obj: any = { a: 1 };
-
-            static async foo() {
-                return NCServer.untracked(A._obj);
-            }
-        }
-        const { server, clientObject: CA, s2 } = await initTest(A);
-        const base = 2;
-        expect(getNumTrackedObjects(server)).toBe(base);
-        const obj = await CA.foo();
-        expect(obj).toEqual({ a: 1 });
-        expect(getNumTrackedObjects(server)).toBe(base);
-        const obj2 = await CA.foo();
-        expect(obj2).not.toBe(obj);
-        expect(obj2).toEqual({ a: 1 });
-        expect(getNumTrackedObjects(server)).toBe(base);
-        s2.close();
-        expect(getNumTrackedObjects(server)).toBe(base);
+    trackedFunctionReturnTest({
+        wrapTracked: false,
+        wrapUntracked: true,
+        defaultTracked: true,
+        isTracked: false,
+    });
+    trackedFunctionReturnTest({
+        wrapTracked: false,
+        wrapUntracked: false,
+        defaultTracked: false,
+        isTracked: false,
+    });
+    trackedFunctionReturnTest({
+        wrapTracked: true,
+        wrapUntracked: false,
+        defaultTracked: false,
+        isTracked: true,
     });
 });
