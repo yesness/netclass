@@ -1,4 +1,3 @@
-import DelayProxy from './delayProxy';
 import {
     FunctionRef,
     Message,
@@ -17,10 +16,6 @@ import {
 import Tracker from './tracker';
 import { INCServer, INCSocket, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
-
-type SyncOptions = {
-    recursive?: boolean; // default: true
-};
 
 class Client<T> {
     private idMap: Record<number, number>;
@@ -255,30 +250,5 @@ export default class NCServer<T> implements INCServer {
             rootIDs = rootIDs.concat(client.syncedObjectIDs);
         }
         this.tracker.garbageCollect(rootIDs);
-    }
-
-    static sync<T extends object>(object: T, options?: SyncOptions): T {
-        if (options?.recursive ?? true) {
-            const obj: any = object;
-            for (const [key, value] of Object.entries(object)) {
-                if (!Tracker.isTrackable(value)) continue;
-                obj[key] = this.sync(value, options);
-            }
-        }
-        if (DelayProxy.isProxy(object)) {
-            return object;
-        } else {
-            return DelayProxy.create(object);
-        }
-    }
-
-    static tracked<T extends object>(object: T): T {
-        Tracker.setTracked(object, true);
-        return object;
-    }
-
-    static untracked<T extends object>(object: T): T {
-        Tracker.setTracked(object, false);
-        return object;
     }
 }

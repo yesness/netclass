@@ -1,5 +1,4 @@
-import NetClass from '..';
-import NCServer from '../server';
+import NetClass, { NCUtil } from '..';
 import { INCClient, INCServer, INCSocket, NCServerOptions } from '../types';
 
 type DataCB = (data: Buffer) => void;
@@ -394,7 +393,7 @@ describe('NetClass - general', () => {
     });
 
     test('track function arguments', async () => {
-        const A = NCServer.sync(
+        const A = NCUtil.sync(
             class {
                 static obj: any = { a: 1 };
 
@@ -465,7 +464,7 @@ describe('NetClass - general', () => {
 
 describe('Netclass - prop updates', () => {
     test('simple updates', async () => {
-        const Person = NCServer.sync(
+        const Person = NCUtil.sync(
             class P {
                 static nextID: number = 1;
                 static async create(name: string): Promise<P> {
@@ -488,7 +487,7 @@ describe('Netclass - prop updates', () => {
     });
 
     test('multi client updates', async () => {
-        const A = NCServer.sync(
+        const A = NCUtil.sync(
             class {
                 static val: string = 'first';
 
@@ -508,7 +507,7 @@ describe('Netclass - prop updates', () => {
     });
 
     test('new values are proxies', async () => {
-        const A = NCServer.sync(
+        const A = NCUtil.sync(
             class {
                 static obj: any = { a: 1 };
 
@@ -598,7 +597,7 @@ describe('Netclass - garbage collection', () => {
     });
 
     test('shared object', async () => {
-        let db: { value: any } = NCServer.sync({ value: { a: 1 } });
+        let db: { value: any } = NCUtil.sync({ value: { a: 1 } });
         const {
             server,
             clientObject: CA,
@@ -647,9 +646,9 @@ describe('Netclass - garbage collection', () => {
 
                 static async foo() {
                     if (options.wrapTracked) {
-                        return NCServer.tracked(A._obj);
+                        return NCUtil.tracked(A._obj);
                     } else if (options.wrapUntracked) {
-                        return NCServer.untracked(A._obj);
+                        return NCUtil.untracked(A._obj);
                     } else {
                         return A._obj;
                     }
