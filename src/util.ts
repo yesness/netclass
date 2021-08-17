@@ -53,6 +53,8 @@ export function handleSocket<TSend, TReceive>(
     };
 }
 
+export type GetAllPropsType = 'function' | 'instance' | 'object' | 'array';
+
 class PropUtilClass {
     private objectStop: any;
     private functionStop: any;
@@ -75,13 +77,13 @@ class PropUtilClass {
 
     getAllProps(
         toCheck: any,
-        type: 'function' | 'instance' | 'object' | 'array',
+        type: GetAllPropsType,
         options?: {
-            excludeProp?: string;
+            excludeProps?: string[];
             excludeUnderscore?: boolean;
         }
     ): string[] {
-        const excludeProp = options?.excludeProp;
+        const excludeProps = options?.excludeProps ?? [];
         const excludeUnderscore = options?.excludeUnderscore ?? true;
         const props: string[] = [];
         let obj = toCheck;
@@ -104,7 +106,7 @@ class PropUtilClass {
                 (type === 'array' &&
                     (this.defaultArrayProps.includes(prop) ||
                         !isNaN(parseInt(prop)))) ||
-                prop === options?.excludeProp ||
+                excludeProps.includes(prop) ||
                 prop === DelayProxy.propertyName ||
                 (excludeUnderscore && prop.startsWith('_'))
             ) {

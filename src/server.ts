@@ -265,4 +265,9 @@ export default class NCServer<T> implements INCServer {
             return DelayProxy.create(object);
         }
     }
+
+    static untracked<T extends object>(object: T): T {
+        Tracker.markUntracked(object);
+        return object;
+    }
 }

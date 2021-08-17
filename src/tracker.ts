@@ -7,7 +7,9 @@ import {
     ObjectUpdateMap,
     StructureValue,
 } from './structureTypes';
-import { PropUtil } from './util';
+import { GetAllPropsType, PropUtil } from './util';
+
+export const NC_UNTRACKED_PROP = '_netclass_untracked';
 
 type TrackedObject = {
     object: any;
@@ -21,6 +23,10 @@ type NetClassInfo = {
 export default class Tracker {
     static isTrackable(object: any): boolean {
         return ['object', 'function'].includes(typeof object);
+    }
+
+    static markUntracked(object: object) {
+        Object.defineProperty(object, NC_UNTRACKED_PROP, { value: true });
     }
 
     private static isInstance(object: any): boolean {
@@ -43,12 +49,15 @@ export default class Tracker {
     }
 
     getValue(object: any): StructureValue {
+        const trackable = Tracker.isTrackable(object);
+
         // Handle simple values
         if (
             ['string', 'number', 'boolean', 'undefined'].includes(
                 typeof object
             ) ||
-            object === null
+            object === null ||
+            (trackable && object[NC_UNTRACKED_PROP] === true)
         ) {
             return {
                 type: 'simple',
@@ -57,7 +66,7 @@ export default class Tracker {
         }
 
         // Handle trackable objects
-        else if (Tracker.isTrackable(object)) {
+        else if (trackable) {
             return {
                 type: 'reference',
                 objectID: this.trackObject(object),
@@ -215,13 +224,9 @@ export default class Tracker {
                 objectIsInstance = Tracker.isInstance(object);
                 type = 'object';
                 if (objectIsInstance) {
-                    funcs = PropUtil.getAllProps(
+                    funcs = this.getAllProps(
                         Object.getPrototypeOf(object),
-                        'instance',
-                        {
-                            excludeProp: this.infoProperty,
-                            excludeUnderscore: this.excludeUnderscore,
-                        }
+                        'instance'
                     );
                     type = 'instance';
                 }
@@ -254,10 +259,7 @@ export default class Tracker {
         excludeFuncs: string[] = []
     ): ObjectMap {
         const map: ObjectMap = {};
-        const props = PropUtil.getAllProps(object, type, {
-            excludeProp: this.infoProperty,
-            excludeUnderscore: this.excludeUnderscore,
-        });
+        const props = this.getAllProps(object, type);
         for (let prop of props) {
             if (excludeFuncs.includes(prop)) continue;
             map[prop] = this.getValue(object[prop]);
@@ -289,5 +291,12 @@ export default class Tracker {
             };
         }
         return this.updates[objectID];
+    }
+
+    private getAllProps(object: any, type: GetAllPropsType): string[] {
+        return PropUtil.getAllProps(object, type, {
+            excludeProps: [this.infoProperty, NC_UNTRACKED_PROP],
+            excludeUnderscore: this.excludeUnderscore,
+        });
     }
 }

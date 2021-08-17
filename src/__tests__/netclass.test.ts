@@ -634,4 +634,47 @@ describe('Netclass - garbage collection', () => {
         c2s2.close();
         expect(getNumTrackedObjects(server)).toBe(base);
     });
+
+    test('tracked function return', async () => {
+        class A {
+            private static _obj: any = { a: 1 };
+
+            static async foo() {
+                return A._obj;
+            }
+        }
+        const { server, clientObject: CA, s2 } = await initTest(A);
+        const base = 2;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        const obj = await CA.foo();
+        expect(obj).toEqual({ a: 1 });
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        const obj2 = await CA.foo();
+        expect(obj2).toBe(obj);
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+    });
+
+    test('untracked function return', async () => {
+        class A {
+            private static _obj: any = { a: 1 };
+
+            static async foo() {
+                return NCServer.untracked(A._obj);
+            }
+        }
+        const { server, clientObject: CA, s2 } = await initTest(A);
+        const base = 2;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        const obj = await CA.foo();
+        expect(obj).toEqual({ a: 1 });
+        expect(getNumTrackedObjects(server)).toBe(base);
+        const obj2 = await CA.foo();
+        expect(obj2).not.toBe(obj);
+        expect(obj2).toEqual({ a: 1 });
+        expect(getNumTrackedObjects(server)).toBe(base);
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+    });
 });
