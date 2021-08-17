@@ -704,4 +704,35 @@ describe('Netclass - garbage collection', () => {
         defaultTracked: false,
         isTracked: true,
     });
+
+    test('nc properties are removed from GCed objects', async () => {
+        class A {
+            static _obj: any = { a: 1 };
+
+            static async foo() {
+                return A._obj;
+            }
+        }
+        const { server, clientObject: CA, s2 } = await initTest(A);
+        const base = 2;
+        expect(getNumTrackedObjects(server)).toBe(base);
+        await CA.foo();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        await CA.foo();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        s2.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+
+        const [s1, s3] = getSockets();
+        server.connect(s1);
+        const client2 = await NetClass.createClient<typeof A>(s3);
+        const CA2 = client2.getObject();
+        expect(getNumTrackedObjects(server)).toBe(base);
+        await CA2.foo();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        await CA2.foo();
+        expect(getNumTrackedObjects(server)).toBe(base + 1);
+        s3.close();
+        expect(getNumTrackedObjects(server)).toBe(base);
+    });
 });

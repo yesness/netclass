@@ -27,7 +27,10 @@ export default class Tracker {
     }
 
     static setTracked(object: object, tracked: boolean) {
-        Object.defineProperty(object, NC_TRACKED_PROP, { value: tracked });
+        Object.defineProperty(object, NC_TRACKED_PROP, {
+            value: tracked,
+            configurable: true,
+        });
     }
 
     private static isInstance(object: any): boolean {
@@ -140,6 +143,9 @@ export default class Tracker {
             );
         }
         for (const objID of allIDs) {
+            const { object } = this.objects[objID];
+            delete object[this.infoProperty];
+            delete object[NC_TRACKED_PROP];
             delete this.objects[objID];
         }
     }
@@ -172,6 +178,7 @@ export default class Tracker {
         };
         Object.defineProperty(object, this.infoProperty, {
             value: ncInfo,
+            configurable: true,
         });
         const structure = this.getComplexStructure(object);
         this.objects[objectID] = {
