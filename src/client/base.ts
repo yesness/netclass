@@ -1,4 +1,3 @@
-import { EventEmitter } from 'events';
 import {
     Message,
     Packet,
@@ -10,21 +9,28 @@ import {
 import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
 
+type SPacketListener = (packet: SPacket) => void;
+
 export interface IBaseClient {
-    on(event: 'spacket', listener: (packet: SPacket) => void): this;
+    on(event: 'spacket', listener: SPacketListener): this;
     send(msg: PartialMessage): Promise<RPacket>;
 }
 
-export default class BaseClient extends EventEmitter implements IBaseClient {
+export default class BaseClient implements IBaseClient {
     private messageResolves: Record<string, Function>;
     private sendRaw: SocketSend<Message>;
+    private sPacketListener: SPacketListener[] = [];
 
     constructor(socket: INCSocket, private debugLogging: boolean) {
-        super();
         this.messageResolves = {};
         this.sendRaw = handleSocket<Message, Packet>(socket, {
             onJSON: (packet: Packet) => this.onPacket(packet),
         });
+    }
+
+    on(event: 'spacket', listener: (packet: SPacket) => void) {
+        this.sPacketListener.push(listener);
+        return this;
     }
 
     private getMessageID(): string {
@@ -76,7 +82,9 @@ export default class BaseClient extends EventEmitter implements IBaseClient {
     }
 
     private onSPacket(packet: SPacket) {
-        this.emit('spacket', packet);
+        for (const cb of this.sPacketListener) {
+            cb(packet);
+        }
     }
 
     async init(): Promise<PacketInit> {
