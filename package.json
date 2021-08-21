@@ -8,7 +8,8 @@
         "lib/**/*"
     ],
     "scripts": {
-        "build": "rimraf lib && tsc && node minify.js",
+        "build": "rimraf lib && tsc && npm run buildBrowser",
+        "buildBrowser": "browserify browser.js --standalone NetClass -o lib/netclass.min.js",
         "test": "jest",
         "prepare": "npm run build",
         "prepublishOnly": "npm test",
@@ -31,10 +32,13 @@
         "@babel/plugin-transform-modules-commonjs": "^7.10.4",
         "@babel/preset-typescript": "^7.10.4",
         "@types/jest": "^26.0.14",
-        "@vercel/ncc": "^0.29.1",
+        "browserify": "^17.0.0",
         "jest": "^26.4.2",
         "rimraf": "^3.0.2",
         "ts-jest": "^26.4.0",
         "typescript": "^4.0.3"
+    },
+    "dependencies": {
+        "@yesness/events": "git+https://github.com/yesness/events.git"
     }
 }

@@ -1,3 +1,4 @@
+import YNEvents from '@yesness/events';
 import {
     Message,
     Packet,
@@ -16,21 +17,16 @@ export interface IBaseClient {
     send(msg: PartialMessage): Promise<RPacket>;
 }
 
-export default class BaseClient implements IBaseClient {
+export default class BaseClient extends YNEvents implements IBaseClient {
     private messageResolves: Record<string, Function>;
     private sendRaw: SocketSend<Message>;
-    private sPacketListener: SPacketListener[] = [];
 
     constructor(socket: INCSocket, private debugLogging: boolean) {
+        super();
         this.messageResolves = {};
         this.sendRaw = handleSocket<Message, Packet>(socket, {
             onJSON: (packet: Packet) => this.onPacket(packet),
         });
-    }
-
-    on(event: 'spacket', listener: (packet: SPacket) => void) {
-        this.sPacketListener.push(listener);
-        return this;
     }
 
     private getMessageID(): string {
@@ -82,9 +78,7 @@ export default class BaseClient implements IBaseClient {
     }
 
     private onSPacket(packet: SPacket) {
-        for (const cb of this.sPacketListener) {
-            cb(packet);
-        }
+        this.emit('spacket', packet);
     }
 
     async init(): Promise<PacketInit> {
