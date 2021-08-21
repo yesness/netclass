@@ -1,3 +1,4 @@
+import { IYNSocket } from '@yesness/socket';
 import initClient from './client/client';
 import DelayProxy from './delayProxy';
 import NCServer from './server';
@@ -5,7 +6,6 @@ import Tracker from './tracker';
 import {
     INCClient,
     INCServer,
-    INCSocket,
     NCClientOptions,
     NCServerOptions,
 } from './types';
@@ -47,7 +47,7 @@ export default class NetClass {
     }
 
     static async createClient<T>(
-        socket: INCSocket,
+        socket: IYNSocket,
         options?: NCClientOptions
     ): Promise<INCClient<T>> {
         return await initClient(socket, options ?? {});

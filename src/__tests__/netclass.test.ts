@@ -1,49 +1,41 @@
+import YNEvents from '@yesness/events';
+import { IYNSocket } from '@yesness/socket';
 import NetClass, { NCUtil } from '..';
-import { INCClient, INCServer, INCSocket, NCServerOptions } from '../types';
-
-type DataCB = (data: Buffer) => void;
-type CloseCB = () => void;
+import { INCClient, INCServer, NCServerOptions } from '../types';
 
 function sleep(time: number) {
     return new Promise((resolve) => setTimeout(resolve, time));
 }
 
-function getSockets(delay: number = 1): [INCSocket, INCSocket] {
-    const s1data: DataCB[] = [];
-    const s2data: DataCB[] = [];
-    const s1close: CloseCB[] = [];
-    const s2close: CloseCB[] = [];
-    const onClose = () => s1close.concat(s2close).forEach((cb) => cb());
-    const s1: INCSocket = {
-        send: (data: Buffer) => {
-            setTimeout(() => s2data.forEach((cb) => cb(data)), delay);
-        },
-        close: onClose,
-        onData: (cb: DataCB) => {
-            s1data.push(cb);
-        },
-        onClose: (cb: CloseCB) => {
-            s1close.push(cb);
-        },
+function getSockets(delay: number = 1): [IYNSocket, IYNSocket] {
+    class TestSocket extends YNEvents implements IYNSocket {
+        send(data: Buffer | string) {
+            this.emit('ourdata', data);
+        }
+        close() {
+            this.emit('ourclose');
+        }
+    }
+    const s1 = new TestSocket();
+    const s2 = new TestSocket();
+    s1.on('ourdata', (data) => {
+        setTimeout(() => s2.emit('data', data), delay);
+    });
+    s2.on('ourdata', (data) => {
+        setTimeout(() => s1.emit('data', data), delay);
+    });
+    const close = () => {
+        s1.emit('close');
+        s2.emit('close');
     };
-    const s2: INCSocket = {
-        send: (data: Buffer) => {
-            setTimeout(() => s1data.forEach((cb) => cb(data)), delay);
-        },
-        close: onClose,
-        onData: (cb: DataCB) => {
-            s2data.push(cb);
-        },
-        onClose: (cb: CloseCB) => {
-            s2close.push(cb);
-        },
-    };
+    s1.on('ourclose', close);
+    s2.on('ourclose', close);
     return [s1, s2];
 }
 
 type TestData<T> = {
-    s1: INCSocket;
-    s2: INCSocket;
+    s1: IYNSocket;
+    s2: IYNSocket;
     server: INCServer;
     client: INCClient<T>;
     serverObject: T;
@@ -75,8 +67,8 @@ async function initTest<T>(
 type MultiTestData<T> = TestData<T> & {
     client2: INCClient<T>;
     clientObject2: T;
-    c2s1: INCSocket;
-    c2s2: INCSocket;
+    c2s1: IYNSocket;
+    c2s2: IYNSocket;
 };
 
 async function initMultiClientTest<T>(

@@ -1,3 +1,4 @@
+import { IYNSocket } from '@yesness/socket';
 import { FunctionRef, PacketInit, SPacket } from '../internalTypes';
 import {
     ComplexStructure,
@@ -9,7 +10,7 @@ import {
     UpdateBundle,
     ValueBundle,
 } from '../structureTypes';
-import { INCClient, INCSocket, NCClientOptions } from '../types';
+import { INCClient, NCClientOptions } from '../types';
 import BaseClient, { IBaseClient } from './base';
 
 type UpsertState = {
@@ -195,7 +196,7 @@ class NCClient<T> implements INCClient<T> {
 }
 
 export default async function initClient<T>(
-    socket: INCSocket,
+    socket: IYNSocket,
     options: NCClientOptions
 ): Promise<NCClient<T>> {
     const client = new BaseClient(socket, options?.debugLogging ?? false);

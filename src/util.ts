@@ -1,5 +1,5 @@
+import { IYNSocket } from '@yesness/socket';
 import DelayProxy from './delayProxy';
-import { INCSocket } from './types';
 
 export type SocketSend<T> = (json: T) => void;
 
@@ -13,7 +13,7 @@ export function randomString(length: number): string {
 }
 
 export function handleSocket<TSend, TReceive>(
-    socket: INCSocket,
+    socket: IYNSocket,
     callbacks: {
         onJSON: (json: TReceive) => void;
         onClose?: () => void;
@@ -21,7 +21,7 @@ export function handleSocket<TSend, TReceive>(
 ): SocketSend<TSend> {
     let closed = false;
     let buffer = '';
-    socket.onData((data) => {
+    socket.on('data', (data) => {
         if (closed) return;
         try {
             buffer += data.toString('utf-8');
@@ -44,7 +44,7 @@ export function handleSocket<TSend, TReceive>(
             socket.close();
         }
     });
-    socket.onClose(() => {
+    socket.on('close', () => {
         closed = true;
         callbacks.onClose?.();
     });

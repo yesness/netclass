@@ -1,3 +1,4 @@
+import { IYNSocket } from '@yesness/socket';
 import {
     FunctionRef,
     Message,
@@ -14,7 +15,7 @@ import {
     ValueBundle,
 } from './structureTypes';
 import Tracker from './tracker';
-import { INCServer, INCSocket, NCServerOptions } from './types';
+import { INCServer, NCServerOptions } from './types';
 import { handleSocket, SocketSend } from './util';
 
 class Client<T> {
@@ -22,11 +23,7 @@ class Client<T> {
     private send: SocketSend<Packet>;
     syncedObjectIDs: number[];
 
-    constructor(
-        private id: number,
-        private server: NCServer<T>,
-        socket: INCSocket
-    ) {
+    constructor(private server: NCServer<T>, socket: IYNSocket) {
         this.idMap = {};
         const send = handleSocket<Packet, Message>(socket, {
             onJSON: (msg: Message) => this.onMessage(msg),
@@ -217,7 +214,6 @@ export default class NCServer<T> implements INCServer {
     tracker: Tracker;
     structure: StructureValue;
     clients: Client<T>[] = [];
-    private nextClientID: number = 1;
     trackFunctionReturnValues: boolean;
 
     constructor(options: NCServerOptions<T>) {
@@ -231,8 +227,8 @@ export default class NCServer<T> implements INCServer {
             options.trackFunctionReturnValues ?? true;
     }
 
-    connect(socket: INCSocket): void {
-        const client = new Client(this.nextClientID++, this, socket);
+    connect(socket: IYNSocket): void {
+        const client = new Client(this, socket);
         this.clients.push(client);
     }
 

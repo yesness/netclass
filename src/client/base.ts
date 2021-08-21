@@ -1,4 +1,5 @@
 import YNEvents from '@yesness/events';
+import { IYNSocket } from '@yesness/socket';
 import {
     Message,
     Packet,
@@ -7,7 +8,6 @@ import {
     RPacket,
     SPacket,
 } from '../internalTypes';
-import { INCSocket } from '../types';
 import { handleSocket, randomString, SocketSend } from '../util';
 
 type SPacketListener = (packet: SPacket) => void;
@@ -21,7 +21,7 @@ export default class BaseClient extends YNEvents implements IBaseClient {
     private messageResolves: Record<string, Function>;
     private sendRaw: SocketSend<Message>;
 
-    constructor(socket: INCSocket, private debugLogging: boolean) {
+    constructor(socket: IYNSocket, private debugLogging: boolean) {
         super();
         this.messageResolves = {};
         this.sendRaw = handleSocket<Message, Packet>(socket, {
