@@ -2,6 +2,7 @@ import { IYNSocket } from '@yesness/socket';
 import initClient from './client/client';
 import DelayProxy from './delayProxy';
 import NCServer from './server';
+import splitSocket from './splitSocket';
 import Tracker from './tracker';
 import {
     INCClient,
@@ -38,6 +39,13 @@ export class NCUtil {
     static untracked<T extends object>(object: T): T {
         Tracker.setTracked(object, false);
         return object;
+    }
+
+    static splitSocket(socket: IYNSocket): {
+        server: IYNSocket;
+        client: IYNSocket;
+    } {
+        return splitSocket(socket);
     }
 }
 

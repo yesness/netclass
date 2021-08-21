@@ -728,3 +728,49 @@ describe('Netclass - garbage collection', () => {
         expect(getNumTrackedObjects(server)).toBe(base);
     });
 });
+
+describe('NetClass - split socket', () => {
+    test('split socket', async () => {
+        const [s1, s2] = getSockets();
+        const Host1 = NCUtil.sync(
+            class H1 {
+                static str: string = 'host1';
+                static async setStr(str: string) {
+                    Host1.str = str;
+                }
+            }
+        );
+        const Host2 = NCUtil.sync(
+            class H2 {
+                static num: number = 1;
+                static async setNum(num: number) {
+                    Host2.num = num;
+                }
+            }
+        );
+        const h1Sockets = NCUtil.splitSocket(s1);
+        const h2Sockets = NCUtil.splitSocket(s2);
+        const h1Server = NetClass.createServer({
+            object: Host1,
+        });
+        const h2Server = NetClass.createServer({
+            object: Host2,
+        });
+        h1Server.connect(h1Sockets.server);
+        h2Server.connect(h2Sockets.server);
+        const h1Client = await NetClass.createClient<typeof Host2>(
+            h1Sockets.client
+        );
+        const h2Client = await NetClass.createClient<typeof Host1>(
+            h2Sockets.client
+        );
+        const h1Host2 = h1Client.getObject();
+        const h2Host1 = h2Client.getObject();
+        expect(h1Host2.num).toBe(1);
+        expect(h2Host1.str).toBe('host1');
+        await h1Host2.setNum(42);
+        expect(h1Host2.num).toBe(42);
+        await h2Host1.setStr('hello');
+        expect(h2Host1.str).toBe('hello');
+    });
+});

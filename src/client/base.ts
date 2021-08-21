@@ -42,10 +42,17 @@ export default class BaseClient extends YNEvents implements IBaseClient {
         const packet: RPacket = await new Promise((resolve) => {
             const msgID = this.getMessageID();
             this.messageResolves[msgID] = resolve;
-            this.sendRaw({
+            const message = {
                 ...msg,
                 msgID,
-            });
+            };
+            if (this.debugLogging) {
+                console.debug(
+                    '[CLIENT] sending',
+                    JSON.stringify(message, null, 2)
+                );
+            }
+            this.sendRaw(message);
         });
         if (packet.type === 'error') {
             throw new Error(
@@ -56,6 +63,9 @@ export default class BaseClient extends YNEvents implements IBaseClient {
     }
 
     private onPacket(packet: Packet) {
+        if (this.debugLogging) {
+            console.debug('[CLIENT] onPacket', JSON.stringify(packet, null, 2));
+        }
         if ('msgID' in packet) {
             this.onRPacket(packet);
         } else {
@@ -69,9 +79,6 @@ export default class BaseClient extends YNEvents implements IBaseClient {
             throw new Error(
                 `Received packet with invalid msgID: ${JSON.stringify(packet)}`
             );
-        }
-        if (this.debugLogging) {
-            console.debug('[CLIENT] onPacket', JSON.stringify(packet, null, 2));
         }
         delete this.messageResolves[packet.msgID];
         resolve(packet);
