@@ -1,6 +1,6 @@
 {
     "name": "@yesness/netclass",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Proxy classes, objects, and functions over a network connection.",
     "main": "lib/index.js",
     "types": "lib/index.d.ts",
@@ -20,7 +20,10 @@
         "url": "git+https://github.com/yesness/netclass.git"
     },
     "keywords": [
-        "netclass"
+        "netclass",
+        "ynnetclass",
+        "proxy",
+        "remote"
     ],
     "author": "rcpooley",
     "license": "ISC",
@@ -39,7 +42,7 @@
         "typescript": "^4.0.3"
     },
     "dependencies": {
-        "@yesness/events": "git+https://github.com/yesness/events.git",
-        "@yesness/socket": "git+https://github.com/yesness/socket.git"
+        "@yesness/events": "^1.0.0",
+        "@yesness/socket": "^1.0.1"
     }
 }
