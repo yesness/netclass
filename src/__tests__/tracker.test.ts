@@ -278,7 +278,7 @@ describe('Tracker', () => {
             let [input, expected] = testCase;
             const trackedObjects = testCase[2] ?? [];
             test(name, () => {
-                const tracker = new Tracker('_netclass_id');
+                const tracker = new Tracker('_netclass_id', true);
                 const anyTracker: any = tracker;
                 const value = tracker.getValue(input);
                 expect(value).toEqual(expected);
